@@ -15,8 +15,8 @@ ApproveFn = Callable[[Tool, dict], bool]
 class Agent:
     """Minimal model-decides / we-execute loop.
 
-    Extension points for the next build session are marked TODO:
-    JSON-Schema arg validation, richer guardrails, streaming, tracing, memory.
+    Still to build (see CLAUDE.md roadmap): richer guardrails, streaming,
+    tracing, memory.
     """
 
     def __init__(self, registry: Registry, client=None, model: str | None = None,
@@ -59,7 +59,11 @@ class Agent:
             args = json.loads(tc.function.arguments or "{}")
         except json.JSONDecodeError:
             return {"error": "could not parse tool arguments"}
-        # TODO: validate `args` against tool.parameters (JSON Schema) before running.
+        # Reject (never repair) bad args, before approval: the model gets the
+        # errors plus the schema and can retry next round.
+        if errors := tool.validate(args):
+            return {"error": f"invalid arguments for tool '{tool.name}'",
+                    "details": errors, "expected": tool.parameters}
         if tool.dangerous and self.approve and not self.approve(tool, args):
             return {"error": "tool call not approved"}
         try:

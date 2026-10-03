@@ -1,7 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable
+
+from jsonschema import Draft202012Validator
+
+MAX_ARG_ERRORS = 5  # keep error feedback short; the 1.2B model drowns in long lists
 
 
 @dataclass
@@ -11,6 +15,21 @@ class Tool:
     parameters: dict  # JSON Schema for the arguments
     func: Callable[..., Any]
     dangerous: bool = False  # side-effecting -> gated by the agent's approve hook
+    _validator: Draft202012Validator = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        # Fail fast on a malformed schema at registration, not mid-run.
+        Draft202012Validator.check_schema(self.parameters)
+        self._validator = Draft202012Validator(self.parameters)
+
+    def validate(self, args: Any) -> list[str]:
+        """Check `args` against `parameters`. Returns readable errors; empty if valid."""
+        errors = sorted(self._validator.iter_errors(args), key=lambda e: list(e.absolute_path))
+        out = []
+        for e in errors[:MAX_ARG_ERRORS]:
+            path = ".".join(str(p) for p in e.absolute_path)
+            out.append(f"{path}: {e.message}" if path else e.message)
+        return out
 
 
 class Registry:
