@@ -51,5 +51,10 @@ client executes, results feed back).
 - `tool_choice` is accepted by the API but not enforced — the model decides.
 
 ## Git
-Fresh repo, branch `main`, local identity Panos Vasilopoulos <sonap.sav@gmail.com>
-(matches the API repo). No remote yet — create one when ready.
+- Remote `origin` → https://github.com/SonapSav/onnx-lfm-agent (**public**); `main` tracks `origin/main`.
+- Repo-local identity Panos Vasilopoulos <sonap.sav@gmail.com> (matches the API repo).
+  The global identity on this host is different (`dev@primesoft.ae`) — don't rely on it.
+- Repo-local credentials: for `https://github.com` the global `store` helper is
+  cleared and `!gh auth git-credential` is used with username `SonapSav`. This
+  follows gh's *active* account (several are logged in), so if pushes fail or
+  land under the wrong account: `gh auth switch -u SonapSav`.
