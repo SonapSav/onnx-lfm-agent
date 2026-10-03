@@ -107,8 +107,11 @@ including propose → approve → commit → operator rollback on the demo works
    vs 6.46 s on the laptop CPU, gen 123 vs 18 tok/s; live evals identical to CPU (prompt off A6 B6 C0 D0, on A6 B0
    C1 D6) at 1.5–2.2 s/call. **IO binding DONE** (API `LFM_IO_BINDING`, auto = CUDA + fp16/bf16 cache): q4f16 decode
    1.36x at 2.3k context, token-identical. It can't help q4 here: ORT's CUDA attention op is fp16/bf16-only, so with
-   q4's fp32 cache attention runs **on the CPU** (that's why q4 decode slows as context grows). Possible next win on
-   this card: cast attention to fp16 in the q4 graph (q4 prefill + GPU attention + binding). Still open: an
+   q4's fp32 cache attention runs **on the CPU**. **Tried and dropped: fp16 attention in the q4 graph** (fp16 cache,
+   Casts around the 6 GQA nodes, so attention runs on CUDA). Greedy tokens identical to q4, but decode at 64/700/2000
+   ctx was 145/99/60 tok/s with binding vs q4's 145/106/67, and prefill was unchanged. On Turing, ORT's CUDA GQA is no
+   faster than its CPU one (no fused attention before sm_80), so the slowdown with context comes from the kernel,
+   not the copies. Re-try on Ampere/Orin only. Still open: an
    aarch64/JetPack image for Orin, re-measure fp16 there. Dev flow: edit on the laptop, `rsync` the API tree to the
    server, rebuild, bench through the tunnel; commit once measured.
 
