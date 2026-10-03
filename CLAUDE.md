@@ -61,12 +61,20 @@ lifecycle, deps, and trust boundary (this one *executes tools*; the API only
   schema = sibling `<stem>.schema.json`, unified diff; errors list existing keys so the model can retry.
 - `examples/workspace/` — demo `app.yaml` + schema + `logs/app.log` (timeouts); copy to `./workspace` (gitignored, own git repo).
 - `cli.py` — `lfm-agent` REPL / one-shot, interactive approver for `ask` tools (shows `preview`; EOF → deny), `--rollback`.
+- `evals.py` + `scripts/eval_live.py` — live eval scenarios A–D (directed apply / directed propose / open-ended /
+  no-tools) against the real model; fresh temp git workspace per run (seeded from `examples/workspace`, so it never
+  touches `./workspace` and works on any machine); prompt off/on comparison; reports pass rate, s/call, out tokens,
+  truncations, tool paths. `scripts/bench_api.py` — API speed (gen tok/s + tool-calling request): throwaway
+  containers per `quant[:threads]` config (`--gpu`, `--image`, `--model-repo`, `--models-dir`), or `--url` for a
+  running API (Jetson). These replace the ad-hoc scratch scripts used for every number in this file.
 - `tests/` — unit tests, no server: `fakes.py` (`FakeClient` replays scripted model turns, `reply`, `tool_call`),
   `test_registry`, `test_validation`, `test_policy`, `test_server` (FastAPI `TestClient`), `test_workspace_tools`
   (temp git repo seeded from `examples/workspace`). Tests pass `tool_policy=""`
   so a local `LFM_TOOL_POLICY` can't leak in.
+  `test_integration.py` (`-m integration`, deselected by default via `addopts`; skips if the API is down): asserts
+  only what Instruct does reliably (A, D) plus the invariant that `app.yaml` stays schema-valid after B/C runs.
 
-Verified: 97 unit tests pass; live: CLI (venv + compose container) and the HTTP service against the running API,
+Verified: 97 unit + 4 integration tests pass; live: CLI (venv + compose container) and the HTTP service against the running API,
 including propose → approve → commit → operator rollback on the demo workspace.
 
 ## Roadmap — what to build next (rough priority)
@@ -87,7 +95,7 @@ including propose → approve → commit → operator rollback on the demo works
 5. **Tracing/logging** of each step (prompt, tool calls, results) for debugging and evals.
 6. **System prompt** — DONE (base prompt, default on). Still open: state/memory beyond the raw message list
    (e.g. trimming long histories — every token is re-prefilled each round).
-7. **Tests**: an integration test behind a marker that needs a running API (mirror the API repo's `-m integration` pattern).
+7. ~~**Tests**~~ — DONE: `pytest -m integration` (live, ~2 min) + `scripts/eval_live.py` / `scripts/bench_api.py`.
 8. **GPU / Jetson** (target decided: **deploy on Jetson Orin class, develop on an x86 PC with a CUDA GPU**; this
    laptop has no NVIDIA GPU). Agent side needs nothing: point `LFM_URL` at the GPU box's API. API side: verify the
    existing `Dockerfile.gpu` path, keep per-token state on the GPU (ORT IO binding), add an aarch64/JetPack image for

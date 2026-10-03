@@ -26,3 +26,8 @@ lfm-agent-server = "onnx_lfm_agent.server:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.pytest.ini_options]
+markers = ["integration: needs a running onnx-lfm-api (LFM_URL); real model, slow"]
+# Plain `pytest` stays offline and fast; `pytest -m integration` runs the live ones.
+addopts = "-m 'not integration'"

@@ -104,6 +104,7 @@ Override per tool with `LFM_TOOL_POLICY="name=allow,other=deny"`.
 - `toolsets.py` — builds the registry from `LFM_TOOLSETS`.
 - `workspace.py` — the sandbox (path resolution) + git helper.
 - `workspace_tools.py` — file tools, propose/apply, operator rollback.
+- `evals.py` — live eval scenarios (A–D) shared by `scripts/eval_live.py` and the integration tests.
 - `config_edit.py` — one-key JSON/YAML edits (comment/indent-preserving), schema validation, diff.
 - `example_tools.py` — demo tools (time, add), toolset `demo`.
 - `agent.py` — the model-decides / we-execute loop (`Agent`).
@@ -112,5 +113,24 @@ Override per tool with `LFM_TOOL_POLICY="name=allow,other=deny"`.
 
 ## Tests
 ```bash
-pytest        # unit tests (no server needed)
+pytest                    # unit tests: offline, fast (integration tests deselected)
+pytest -m integration     # live: needs a running onnx-lfm-api at LFM_URL (~2 min)
+```
+
+## Evaluating models and hardware
+Both scripts read `LFM_URL` / `LFM_API_KEY` / `LFM_TEMPERATURE` from the
+environment or `./.env`, so they work against any API (laptop, GPU PC, Jetson).
+
+```bash
+# Agent behaviour with the real model: scenarios A-D (see the script's --help),
+# each run in a fresh temp git workspace seeded from examples/workspace.
+.venv/bin/python scripts/eval_live.py                    # 6 runs each, system prompt on
+.venv/bin/python scripts/eval_live.py --compare-prompt   # prompt off vs on
+LFM_URL=http://gpu-pc:8383/v1 .venv/bin/python scripts/eval_live.py -n 3
+
+# API speed: throwaway containers per config (production untouched) ...
+.venv/bin/python scripts/bench_api.py --configs q4:0,q4:6,q4f16:6
+.venv/bin/python scripts/bench_api.py --gpu --image onnx-lfm-api-gpu --configs q4,fp16
+# ... or an API that is already running
+.venv/bin/python scripts/bench_api.py --url http://jetson:8383/v1 --api-key ...
 ```
