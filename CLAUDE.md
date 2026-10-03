@@ -97,9 +97,16 @@ including propose → approve → commit → operator rollback on the demo works
    (e.g. trimming long histories — every token is re-prefilled each round).
 7. ~~**Tests**~~ — DONE: `pytest -m integration` (live, ~2 min) + `scripts/eval_live.py` / `scripts/bench_api.py`.
 8. **GPU / Jetson** (target decided: **deploy on Jetson Orin class, develop on an x86 PC with a CUDA GPU**; this
-   laptop has no NVIDIA GPU). Agent side needs nothing: point `LFM_URL` at the GPU box's API. API side: verify the
-   existing `Dockerfile.gpu` path, keep per-token state on the GPU (ORT IO binding), add an aarch64/JetPack image for
-   Orin. Re-run the live evals there; re-evaluate the Thinking model on GPU (see below).
+   laptop has no NVIDIA GPU). Agent side needs nothing: point `LFM_URL` at the GPU box's API.
+   **x86 dev box up (2026-10-03):** `ssh gpu` (alias in `~/.ssh/config` on the laptop), GTX 1660 6 GB
+   (Turing, no tensor cores), driver 615, Docker + nvidia runtime. Both repos cloned in `~/Development/`; the API runs
+   from the GPU compose files plus an untracked `docker-compose.local.yml` (publishes on `127.0.0.1:8383` only, q4).
+   Reach it with a tunnel: `ssh -f -N -L 18383:127.0.0.1:8383 gpu`, then `LFM_URL=http://127.0.0.1:18383/v1 LFM_API_KEY=`
+   (no auth on that API). Findings: `Dockerfile.gpu` needed a **CUDA 13** base (the ORT 1.30 wheel is a CUDA 13 build);
+   on the 1660 **q4 beats fp16** (fp16 math is slow without tensor cores; see the API README). Agent round 1.35 s
+   vs 6.46 s on the laptop CPU, gen 123 vs 18 tok/s; live evals identical to CPU (prompt off A6 B6 C0 D0, on A6 B0
+   C1 D6) at 1.5–2.2 s/call. Still open: per-token state on the GPU (ORT IO binding; the KV cache round-trips through
+   host memory every token, so decode slows as context grows), an aarch64/JetPack image for Orin, re-measure fp16 there.
 
 ## Design notes / gotchas
 - The model (LFM2.5-1.2B) can be **over-eager** — may call an unnecessary tool (seen: calling `get_current_time` before a weather lookup). Harness should tolerate/ignore irrelevant results; consider narrowing offered tools per step.
@@ -144,8 +151,11 @@ including propose → approve → commit → operator rollback on the demo works
   template/tool format. On this CPU: ~1000–1350 reasoning tokens per round → 68–87 s/call (Instruct ~8 s); at 1024
   max_tokens every call was cut off mid-thought. Quality was better (right key, included `path`, did *not* apply
   in B), still quoted `"15"` and invented a `proposal_id`. `<think>`/`</think>` are **not** special tokens
-  (text survives decoding; the API doesn't split it out yet). Revisit on GPU. Its files live in the API repo's
+  (text survives decoding; the API doesn't split it out yet). Its files live in the API repo's
   `models/lfm2.5-1.2b-thinking/` (separate dir — same filenames as Instruct, would overwrite).
+  **GTX 1660 re-eval (q4, max_tokens 2048, prompt on, 3 runs):** A 1/3 (2 runs cut off at 2048), B **3/3** (Instruct
+  0/6), C 0/3 (but it now reads the files), D 3/3; 780–1450 out tokens, 10–21 s/call (Instruct 1.5–2.2 s). Still not
+  adopted: only B improves, and it costs ~10x per call. Worth re-trying with 4096 max_tokens on a faster GPU.
 - **Temperature** defaults to **0.1** (= the API's Liquid-recommended default; the
   agent always sends it, so it overrides the server's value). Over `/v1` only
   temperature is client-settable — `top_k=50` / `repetition_penalty=1.05` are
