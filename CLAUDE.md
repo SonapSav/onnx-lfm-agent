@@ -100,6 +100,11 @@ including propose → approve → commit → operator rollback on the demo works
     description made it *worse*.
   - called `rollback_config` when asked to apply → rollback removed from the model's tools (operator-only).
   Measured: directed propose+apply went 2/8 → 12/12 with these.
+- **Performance / CPU**: all the load is the API's inference (the agent idles at ~0.3% CPU), so agent
+  workers don't help. The API is tuned on this host to `LFM_QUANT=q4`, `LFM_INTRA_OP_THREADS=6`
+  (6c/12t Ryzen; ORT's default of all 12 threads was ~1.7x slower per tool-calling round at double the
+  CPU) — see the API repo's README "Performance tuning" / commit `9b493f7`. One agent round ≈ 6.5 s;
+  most of it is prompt processing (tool schemas + history), so fewer/shorter tool descriptions = faster.
 - **Temperature** defaults to **0.1** (= the API's Liquid-recommended default; the
   agent always sends it, so it overrides the server's value). Over `/v1` only
   temperature is client-settable — `top_k=50` / `repetition_penalty=1.05` are
