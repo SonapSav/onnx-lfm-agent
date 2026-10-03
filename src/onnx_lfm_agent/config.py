@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     api_key: str = ""                       # LFM_API_KEY — only if the API has auth
     model: str = "lfm2.5"                   # name is cosmetic; the served model is fixed
     max_rounds: int = 6                     # safety cap on tool-call iterations
-    temperature: float = 0.0
+    temperature: float = 0.1                # mirrors the API default (Liquid-recommended)
 
 
 settings = Settings()

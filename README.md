@@ -6,7 +6,7 @@ API over HTTP and never imports the service.
 
 ## Status
 Scaffold / work-in-progress. A working minimal agent loop + tool registry are
-in place; guardrails and validation are intentionally stubbed (see `CLAUDE.md`).
+in place, with JSON-Schema argument validation; guardrails are next (see `CLAUDE.md`).
 
 ## Setup
 Requires a running `onnx-lfm-api` server (e.g. `docker compose up -d` in that
@@ -23,6 +23,21 @@ cp .env.example .env                 # set LFM_URL / LFM_API_KEY if the API has 
 .venv/bin/lfm-agent                              # interactive REPL
 .venv/bin/lfm-agent "what time is it?"           # one-shot
 ```
+
+## Docker
+The API's compose stack must be up first — the agent joins its
+`onnx-lfm-api_default` network and reaches it as `http://onnx-lfm-api:8383/v1`.
+
+```bash
+cp .env.example .env                                   # set LFM_API_KEY to the API's key
+docker compose build
+docker compose run --rm onnx-lfm-agent                 # interactive REPL
+docker compose run --rm onnx-lfm-agent "what is 2+2?"  # one-shot
+```
+
+Dependencies are pinned in `uv.lock` (`uv lock` to refresh after editing
+`pyproject.toml`). Tools run inside the container as an unprivileged user;
+mount anything they need deliberately.
 
 ## Layout
 - `config.py` — `LFM_*` settings (URL, api key, model, max rounds).

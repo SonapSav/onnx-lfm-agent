@@ -22,6 +22,15 @@ lifecycle, deps, and trust boundary (this one *executes tools*; the API only
   uv pip install --python .venv/bin/python -e ".[dev]"
   ```
 - Point at the API via `LFM_URL` / `LFM_API_KEY` (`./.env`, `.env.example`).
+- **Docker**: `Dockerfile` (2-stage, `python:3.13-slim` + uv, `uv sync --frozen`
+  from `uv.lock`, runs as non-root `agent`, `ENTRYPOINT ["lfm-agent"]`) and
+  `docker-compose.yml`, which joins the API's external network
+  `onnx-lfm-api_default` and defaults `LFM_URL=http://onnx-lfm-api:8383/v1`.
+  Start the API first, then `docker compose run --rm onnx-lfm-agent [prompt]`.
+  It's an interactive CLI, not a daemon (no `up -d`) — a service entrypoint
+  (HTTP/queue/cron) is undecided. Unattended runs auto-deny dangerous tools
+  (approver hits EOF), which item 2 must replace with a non-interactive policy.
+- `uv.lock` pins deps; after editing `pyproject.toml` run `uv lock` and commit it.
 
 ## What's already here (the scaffold)
 - `tools.py` — `Tool` dataclass + `Registry` (`@registry.tool(...)`, `.schemas()`, `.get()`), with a `dangerous` flag for side-effecting tools.
@@ -49,6 +58,12 @@ client executes, results feed back).
 - Tool `arguments` arrive as a **JSON string** — `json.loads` before executing.
 - **You own execution = you own safety.** Never blindly dispatch; gate anything side-effecting.
 - `tool_choice` is accepted by the API but not enforced — the model decides.
+- **Temperature** defaults to **0.1** (= the API's Liquid-recommended default; the
+  agent always sends it, so it overrides the server's value). Over `/v1` only
+  temperature is client-settable — `top_k=50` / `repetition_penalty=1.05` are
+  fixed server-side (penalty applies even at 0). 0.0 = exact greedy: use it for
+  reproducible tests/evals, but it makes validation-error retries likelier to
+  repeat the same bad call.
 
 ## Git
 - Remote `origin` → https://github.com/SonapSav/onnx-lfm-agent (**public**); `main` tracks `origin/main`.
