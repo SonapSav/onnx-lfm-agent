@@ -20,6 +20,8 @@ class Tool:
     func: Callable[..., Any]
     dangerous: bool = False  # side-effecting -> defaults to policy "ask"
     policy: str | None = None  # None -> "ask" if dangerous else "allow"
+    # Optional: text shown to a human approver (e.g. the diff a call would apply).
+    preview: Callable[[dict], str] | None = None
     _validator: Draft202012Validator = field(init=False, repr=False, compare=False)
 
     def __post_init__(self) -> None:
@@ -61,10 +63,12 @@ class Registry:
         self._tools: dict[str, Tool] = {}
 
     def tool(self, *, description: str, parameters: dict, dangerous: bool = False,
-             policy: str | None = None, name: str | None = None):
+             policy: str | None = None, preview: Callable[[dict], str] | None = None,
+             name: str | None = None):
         """Decorator to register a function as a tool."""
         def deco(fn: Callable[..., Any]) -> Callable[..., Any]:
-            self.add(Tool(name or fn.__name__, description, parameters, fn, dangerous, policy))
+            self.add(Tool(name or fn.__name__, description, parameters, fn, dangerous,
+                          policy, preview))
             return fn
         return deco
 

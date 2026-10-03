@@ -10,6 +10,12 @@ x-agent-env: &agent-env
   LFM_TEMPERATURE: "${LFM_TEMPERATURE:-0.1}"
   # Per-tool overrides, e.g. "some_tool=allow". Empty = code defaults.
   LFM_TOOL_POLICY: "${LFM_TOOL_POLICY:-}"
+  LFM_TOOLSETS: "${LFM_TOOLSETS:-workspace}"
+
+# The agent's workspace: the only host directory its tools can see. Must exist
+# before `up` (else Docker creates it root-owned) and be a git repo for config
+# changes — see README "Demo workspace".
+x-workspace: &workspace "${LFM_WORKSPACE_HOST:-./workspace}:/workspace"
 
 services:
   # HTTP service: `docker compose up -d`. POST /run with X-API-Key.
@@ -28,6 +34,8 @@ services:
       # Host loopback only — this endpoint executes tools. Drop the
       # "127.0.0.1:" prefix to expose it on the LAN.
       - "127.0.0.1:8384:8384"
+    volumes:
+      - *workspace
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8384/health', timeout=3).status==200 else 1)"]
@@ -47,6 +55,8 @@ services:
     stdin_open: true
     tty: true
     environment: *agent-env
+    volumes:
+      - *workspace
     networks:
       - lfm
 

@@ -18,10 +18,17 @@ RUN uv sync --frozen --no-dev --no-editable
 FROM python:3.13-slim
 
 ENV PYTHONUNBUFFERED=1 \
-    PATH=/app/.venv/bin:$PATH
+    PATH=/app/.venv/bin:$PATH \
+    LFM_WORKSPACE=/workspace
+
+# git: config changes are committed (and rolled back) in the workspace repo.
+# The workspace is a bind mount owned by the host user, so mark it safe.
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/* \
+    && git config --system --add safe.directory /workspace
 
 # Tools execute inside this container, so run them unprivileged. Anything a
-# tool may touch on the host must be mounted in deliberately.
+# tool may touch on the host must be mounted in deliberately (see compose).
 RUN useradd --create-home --uid 1000 agent
 COPY --from=build --chown=agent:agent /app/.venv /app/.venv
 USER agent

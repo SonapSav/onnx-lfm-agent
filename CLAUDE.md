@@ -45,21 +45,39 @@ lifecycle, deps, and trust boundary (this one *executes tools*; the API only
 - `server.py` — `lfm-agent-server` (FastAPI/uvicorn, 1 worker, `create_app()` factory). `GET /health` (no auth; lists tool
   policies), `POST /run {prompt, history?}` → `{answer, steps, history}`; model-API errors → 502. Auth = `LFM_AGENT_API_KEY`
   via `X-API-Key` or `Bearer` (constant-time, same scheme as the API); **refuses to start without it**. No approver → `ask` tools denied.
-- `example_tools.py` — safe demo tools (time, add).
-- `cli.py` — `lfm-agent` REPL / one-shot, with an interactive approver for `ask` tools (EOF → deny).
+- `toolsets.py` — `build_registry(LFM_TOOLSETS)`: `workspace` (default) and/or `demo` (`example_tools.py`: time, add).
+- `workspace.py` — `Workspace.resolve()` sandbox (relative to `LFM_WORKSPACE`; `..`/absolute/symlink escapes and `.git`
+  refused) + `git()` helper (author `onnx-lfm-agent`) + a lock for git-mutating ops.
+- `workspace_tools.py` — `list_files`, `read_file`, `search_files` (allow, capped); `propose_config_change` (allow,
+  writes nothing → diff + validation + `proposal_id`; refuses dirty/untracked files; in-memory `ProposalStore`, cap 50);
+  `apply_config_change` (dangerous/ask; sha256 staleness check, commits only that file with `Agent-Proposal: pN`
+  trailer, restores the file if the commit fails; `preview` shows the diff to the approver).
+  **Rollback is operator-only**: `rollback_last_change()` / `lfm-agent --rollback [-y]`, reverts HEAD only if it has the trailer.
+- `config_edit.py` — one dotted key per edit (ruamel round-trip keeps YAML comments/indent; JSON keeps indent),
+  schema = sibling `<stem>.schema.json`, unified diff; errors list existing keys so the model can retry.
+- `examples/workspace/` — demo `app.yaml` + schema + `logs/app.log` (timeouts); copy to `./workspace` (gitignored, own git repo).
+- `cli.py` — `lfm-agent` REPL / one-shot, interactive approver for `ask` tools (shows `preview`; EOF → deny), `--rollback`.
 - `tests/` — unit tests, no server: `fakes.py` (`FakeClient` replays scripted model turns, `reply`, `tool_call`),
-  `test_registry`, `test_validation`, `test_policy`, `test_server` (FastAPI `TestClient`). Tests pass `tool_policy=""`
+  `test_registry`, `test_validation`, `test_policy`, `test_server` (FastAPI `TestClient`), `test_workspace_tools`
+  (temp git repo seeded from `examples/workspace`). Tests pass `tool_policy=""`
   so a local `LFM_TOOL_POLICY` can't leak in.
 
-Verified: 37 unit tests pass; live: CLI (venv + compose) and the HTTP service against the running API.
+Verified: 91 unit tests pass; live: CLI (venv + compose container) and the HTTP service against the running API,
+including propose → approve → commit → operator rollback on the demo workspace.
 
 ## Roadmap — what to build next (rough priority)
-1. ~~**Arg validation**~~ — DONE (reject-only). Possible follow-up: narrow opt-in repair (numeric strings → numbers, drop undeclared keys) *only if* live runs show the model making those mistakes. Note: example schemas don't set `additionalProperties: false`, so extra args pass validation and surface as a `TypeError` from the call.
-2. **Guardrails / safety** — per-tool allow/ask/deny policy DONE (incl. headless = deny). Still open:
-   **propose → validate → apply** (dry-run/diff, schema check, git commit + rollback) for the log→config class of
-   tasks — deliberately deferred to land *with the first real config-changing tool* (item 3), so it's designed
-   against a concrete case. Maybe later: risk/confidence-based approval.
-3. **Real tools** beyond the demos (HTTP, files, shell, DB) — keep the set small and descriptions crisp; this is a 1.2B model and degrades with large/ambiguous toolboxes.
+1. ~~**Arg validation**~~ — DONE (reject-only at the agent level). Narrow repairs live *inside* `propose_config_change`
+   (see gotchas), added after live runs showed the mistakes. Example schemas don't set `additionalProperties: false`, so extra
+   args pass validation and surface as a `TypeError` from the call.
+2. ~~**Guardrails / safety**~~ — DONE: per-tool allow/ask/deny (headless = deny) and **propose → validate → apply**
+   (diff, schema check, git commit, operator rollback). Maybe later: `POST /proposals/{id}/apply` so a human can approve
+   server-side proposals over HTTP; risk/confidence-based approval.
+3. **Real tools** — first batch DONE (workspace files + config propose/apply). Next candidates: HTTP GET (host allowlist),
+   DB read-only query. Keep the set small (now 5 tools) — this is a 1.2B model.
+   **Known limit:** open-ended "read the logs and fix the config" fails (0/6 live): the model guesses key names
+   (`server.timeout`) instead of reading `app.yaml`, and doesn't use the key list in the error. Directed requests
+   ("change server.request_timeout_s to 15, then apply") succeed 6/6. Likely fixes: a system prompt that says
+   "read the config before proposing" (item 6), or offering fewer tools per step.
 4. **Streaming** of assistant text + tool-call deltas (API already streams; surface it).
 5. **Tracing/logging** of each step (prompt, tool calls, results) for debugging and evals.
 6. **State/memory** across turns beyond the raw message list; maybe a system prompt / persona.
@@ -72,6 +90,16 @@ Verified: 37 unit tests pass; live: CLI (venv + compose) and the HTTP service ag
 - `tool_choice` is accepted by the API but not enforced — the model decides.
 - `run()` must append the final assistant answer to `messages` (it once didn't,
   and the REPL / `/run` history forgot the model's own replies) — covered by tests.
+- **Live-observed model mistakes (LFM2.5-1.2B) and how they're handled** — all in `propose_config_change`, each
+  reported to the model in `note`:
+  - quotes numbers/booleans (`"15"`) → converted only if the schema rejects the string and accepts the conversion,
+    or (no schema) the current value is that kind. Typing `value` in the tool schema instead backfired
+    (number-first type list made it send `0` for `"debug"`), so `value` stays untyped.
+  - omits `path` / folds the file name into the key (`app.yaml.logging.level`) → `path` is optional: taken from the
+    key prefix, else the only config file in the workspace, else refused with the candidates. A clearer param
+    description made it *worse*.
+  - called `rollback_config` when asked to apply → rollback removed from the model's tools (operator-only).
+  Measured: directed propose+apply went 2/8 → 12/12 with these.
 - **Temperature** defaults to **0.1** (= the API's Liquid-recommended default; the
   agent always sends it, so it overrides the server's value). Over `/v1` only
   temperature is client-settable — `top_k=50` / `repetition_penalty=1.05` are

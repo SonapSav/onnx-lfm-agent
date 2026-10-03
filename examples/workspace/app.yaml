@@ -1,0 +1,12 @@
+# Demo service config. onnx-lfm-agent edits it via propose -> apply.
+server:
+  host: 0.0.0.0
+  port: 8080
+  request_timeout_s: 5   # upstream calls to the billing API
+
+database:
+  url: postgres://db:5432/app
+  pool_size: 5
+
+logging:
+  level: info

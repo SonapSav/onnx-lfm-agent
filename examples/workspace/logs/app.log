@@ -1,0 +1,10 @@
+2026-10-02 14:00:01 INFO  server started on 0.0.0.0:8080
+2026-10-02 14:03:12 INFO  GET /invoices 200 312ms
+2026-10-02 14:05:40 ERROR upstream billing API timed out after 5s (request_timeout_s=5)
+2026-10-02 14:05:41 INFO  GET /invoices 504 5003ms
+2026-10-02 14:07:02 INFO  GET /health 200 2ms
+2026-10-02 14:09:18 ERROR upstream billing API timed out after 5s (request_timeout_s=5)
+2026-10-02 14:09:19 INFO  GET /invoices 504 5001ms
+2026-10-02 14:10:55 INFO  billing API p99 latency over last 10m: 11.8s
+2026-10-02 14:12:30 ERROR upstream billing API timed out after 5s (request_timeout_s=5)
+2026-10-02 14:12:31 INFO  GET /invoices 504 5002ms

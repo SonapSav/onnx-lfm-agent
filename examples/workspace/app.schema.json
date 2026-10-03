@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["server", "database", "logging"],
+  "properties": {
+    "server": {
+      "type": "object",
+      "required": ["host", "port", "request_timeout_s"],
+      "properties": {
+        "host": {"type": "string"},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "request_timeout_s": {"type": "number", "minimum": 1, "maximum": 120}
+      },
+      "additionalProperties": false
+    },
+    "database": {
+      "type": "object",
+      "required": ["url", "pool_size"],
+      "properties": {
+        "url": {"type": "string"},
+        "pool_size": {"type": "integer", "minimum": 1, "maximum": 100}
+      },
+      "additionalProperties": false
+    },
+    "logging": {
+      "type": "object",
+      "required": ["level"],
+      "properties": {
+        "level": {"enum": ["debug", "info", "warning", "error"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

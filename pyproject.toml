@@ -13,6 +13,7 @@ dependencies = [
   "openai>=1.40",
   "pydantic>=2.9",
   "pydantic-settings>=2.6",
+  "ruamel.yaml>=0.18",
   "uvicorn[standard]>=0.32",
 ]
 

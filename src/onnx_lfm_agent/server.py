@@ -18,7 +18,7 @@ from pydantic import BaseModel
 
 from .agent import Agent
 from .config import settings
-from .example_tools import registry
+from .toolsets import build_registry
 
 log = logging.getLogger(__name__)
 
@@ -40,7 +40,7 @@ def create_app(agent: Agent | None = None, api_key: str | None = None) -> FastAP
     if not key:
         raise RuntimeError("LFM_AGENT_API_KEY is not set; refusing to start the agent "
                            "server without auth (it executes tools)")
-    agent = agent or Agent(registry)  # no approver: "ask" tools are denied
+    agent = agent or Agent(build_registry())  # no approver: "ask" tools are denied
 
     def require_api_key(
         x_api_key: str | None = Header(default=None),

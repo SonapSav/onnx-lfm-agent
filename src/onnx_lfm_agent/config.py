@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     max_rounds: int = 6                     # safety cap on tool-call iterations
     temperature: float = 0.1                # mirrors the API default (Liquid-recommended)
 
+    # Tools offered to the model: comma-separated toolsets (LFM_TOOLSETS).
+    toolsets: str = "workspace"             # "workspace" (files + config), "demo" (time, add)
+    workspace: str = "workspace"            # LFM_WORKSPACE — the only dir file tools may touch
+
     # Per-tool policy overrides: "name=allow|ask|deny,..." (LFM_TOOL_POLICY).
     # Defaults: read-only tools allow, dangerous tools ask.
     tool_policy: str = ""
