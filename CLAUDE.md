@@ -94,7 +94,8 @@ including propose → approve → commit → operator rollback on the demo works
 4. **Streaming** of assistant text + tool-call deltas (API already streams; surface it).
 5. **Tracing/logging** of each step (prompt, tool calls, results) for debugging and evals.
 6. **System prompt** — DONE (base prompt, default on). Still open: state/memory beyond the raw message list
-   (e.g. trimming long histories — every token is re-prefilled each round).
+   (e.g. trimming long histories). The API's prompt-prefix cache now skips re-reading the shared start of each
+   round, but a longer history still means bigger snapshots and more new tokens per round.
 7. ~~**Tests**~~ — DONE: `pytest -m integration` (live, ~2 min) + `scripts/eval_live.py` / `scripts/bench_api.py`.
 8. **GPU / Jetson** (target decided: **deploy on Jetson Orin class, develop on an x86 PC with a CUDA GPU**; this
    laptop has no NVIDIA GPU). Agent side needs nothing: point `LFM_URL` at the GPU box's API.
@@ -135,11 +136,14 @@ including propose → approve → commit → operator rollback on the demo works
 - **Performance / CPU**: all the load is the API's inference (the agent idles at ~0.3% CPU), so agent
   workers don't help. The API is tuned on this host to `LFM_QUANT=q4`, `LFM_INTRA_OP_THREADS=6`
   (6c/12t Ryzen; ORT's default of all 12 threads was ~1.7x slower per tool-calling round at double the
-  CPU) — see the API repo's README "Performance tuning" / commit `9b493f7`. One agent round ≈ 6.5 s;
-  most of it is prompt processing (tool schemas + history), so fewer/shorter tool descriptions = faster.
+  CPU) — see the API repo's README "Performance tuning" / commit `9b493f7`. One agent round ≈ 6.5 s
+  uncached, mostly prompt processing (tool schemas + history). **The API's prompt-prefix cache** (API README,
+  `LFM_PREFIX_CACHE_SIZE`) reuses the system+tools state and the previous round's conversation: a repeated agent
+  request takes 2.06 s on the laptop CPU and 0.36 s on the GTX 1660 (live-eval calls 0.5–0.9 s on GPU, 141/148 hits).
+  Tool descriptions now cost once per snapshot instead of on every call, but they still cost on cache misses.
   **A second API instance does not help** (measured, batch of 6 agent calls: 1×6 threads 38.6 s; 2×3 threads
   concurrent 37.9 s, within noise; 2×6 threads 55.7 s). Inference is memory-bandwidth bound, so instances just
-  split it. To speed up live testing: shorter prompts/fewer tools, prompt-prefix caching in the API, fewer runs.
+  split it. To speed up live testing: the GPU box (`ssh gpu`, see roadmap 8), shorter prompts, fewer runs.
 - **Live evals: system prompt & guard** (LFM2.5-1.2B-Instruct q4, 6 runs each; A = "propose X, then apply",
   B = "propose X" (must not apply), C = open-ended "check logs and fix", D = "capital of France?" (no tools)):
 
