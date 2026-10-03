@@ -105,8 +105,12 @@ including propose → approve → commit → operator rollback on the demo works
    (no auth on that API). Findings: `Dockerfile.gpu` needed a **CUDA 13** base (the ORT 1.30 wheel is a CUDA 13 build);
    on the 1660 **q4 beats fp16** (fp16 math is slow without tensor cores; see the API README). Agent round 1.35 s
    vs 6.46 s on the laptop CPU, gen 123 vs 18 tok/s; live evals identical to CPU (prompt off A6 B6 C0 D0, on A6 B0
-   C1 D6) at 1.5–2.2 s/call. Still open: per-token state on the GPU (ORT IO binding; the KV cache round-trips through
-   host memory every token, so decode slows as context grows), an aarch64/JetPack image for Orin, re-measure fp16 there.
+   C1 D6) at 1.5–2.2 s/call. **IO binding DONE** (API `LFM_IO_BINDING`, auto = CUDA + fp16/bf16 cache): q4f16 decode
+   1.36x at 2.3k context, token-identical. It can't help q4 here: ORT's CUDA attention op is fp16/bf16-only, so with
+   q4's fp32 cache attention runs **on the CPU** (that's why q4 decode slows as context grows). Possible next win on
+   this card: cast attention to fp16 in the q4 graph (q4 prefill + GPU attention + binding). Still open: an
+   aarch64/JetPack image for Orin, re-measure fp16 there. Dev flow: edit on the laptop, `rsync` the API tree to the
+   server, rebuild, bench through the tunnel; commit once measured.
 
 ## Design notes / gotchas
 - The model (LFM2.5-1.2B) can be **over-eager** — may call an unnecessary tool (seen: calling `get_current_time` before a weather lookup). Harness should tolerate/ignore irrelevant results; consider narrowing offered tools per step.
