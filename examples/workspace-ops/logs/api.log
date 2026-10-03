@@ -1,0 +1,10 @@
+2026-10-02 09:00:00 INFO  api started on 0.0.0.0:8080 (db pool_size=10)
+2026-10-02 09:14:02 INFO  GET /orders 200 41ms
+2026-10-02 09:14:05 ERROR GET /users/9981 404 user not found
+2026-10-02 09:31:40 WARN  database pool exhausted: 10/10 connections busy, 37 requests waiting
+2026-10-02 09:31:45 ERROR GET /orders 503 no database connection available after 5s
+2026-10-02 09:31:46 ERROR GET /orders 503 no database connection available after 5s
+2026-10-02 09:32:10 WARN  database pool exhausted: 10/10 connections busy, 41 requests waiting
+2026-10-02 09:32:15 ERROR POST /checkout 503 no database connection available after 5s
+2026-10-02 09:33:00 INFO  db: 10 connections in use, postgres max_connections=200
+2026-10-02 09:40:12 ERROR GET /orders 503 no database connection available after 5s

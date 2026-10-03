@@ -1,0 +1,7 @@
+2026-10-02 11:00:03 INFO  login ok for user 'carol'
+2026-10-02 11:02:17 ERROR login failed for user 'bob': invalid password (1/5)
+2026-10-02 11:02:31 ERROR login failed for user 'bob': invalid password (2/5)
+2026-10-02 11:04:09 INFO  login ok for user 'bob'
+2026-10-02 11:20:45 ERROR login failed for user 'dave': unknown user
+2026-10-02 11:21:02 ERROR login failed for user 'dave': unknown user
+2026-10-02 11:35:12 INFO  login ok for user 'erin'

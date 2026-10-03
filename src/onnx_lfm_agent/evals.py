@@ -21,7 +21,9 @@ from .agent import Agent, RunResult
 from .client import make_client
 from .toolsets import build_registry
 
-SEED_DIR = Path(__file__).resolve().parents[2] / "examples" / "workspace"
+EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
+SEED_DIR = EXAMPLES / "workspace"  # one app.yaml + one log (scenarios A-D)
+OPS_DIR = EXAMPLES / "workspace-ops"  # 3 configs (YAML/JSON, a list), 3 logs, decoys (E-H)
 
 
 def _git(root: Path, *args: str) -> str:
@@ -31,13 +33,13 @@ def _git(root: Path, *args: str) -> str:
 
 
 @contextmanager
-def seeded_workspace() -> Iterator[Path]:
-    """A throwaway git repo holding a copy of examples/workspace."""
-    if not SEED_DIR.is_dir():
-        raise FileNotFoundError(f"eval seed not found: {SEED_DIR} (run from a repo checkout)")
+def seeded_workspace(seed: Path = SEED_DIR) -> Iterator[Path]:
+    """A throwaway git repo holding a copy of `seed` (an examples/ workspace)."""
+    if not seed.is_dir():
+        raise FileNotFoundError(f"eval seed not found: {seed} (run from a repo checkout)")
     with tempfile.TemporaryDirectory(prefix="lfm-eval-") as tmp:
         root = Path(tmp) / "ws"
-        shutil.copytree(SEED_DIR, root)
+        shutil.copytree(seed, root)
         _git(root, "init", "-q", "-b", "main")
         _git(root, "add", "-A")
         _git(root, "commit", "-q", "-m", "seed")
@@ -93,12 +95,49 @@ def _ok_no_tools(res: RunResult, root: Path) -> bool:
     return not res.steps and "paris" in final.lower()
 
 
+def _configs(root: Path) -> list[Path]:
+    return sorted(p for p in root.rglob("*") if p.suffix in ce.SUFFIXES
+                  and not p.name.endswith(".schema.json") and ".git" not in p.parts)
+
+
+def config_changes(root: Path, seed: Path) -> dict[str, tuple]:
+    """{"file:key": (seed value, value now)} over every config file."""
+    from .log_fix import leaves
+    out = {}
+    for f in _configs(seed):
+        rel = f.relative_to(seed).as_posix()
+        fmt = ce.config_format(f)
+        before = leaves(ce.parse(f.read_text(), fmt))
+        after = leaves(ce.parse((root / rel).read_text(), fmt))
+        for k in before.keys() | after.keys():
+            if before.get(k, "<missing>") != after.get(k, "<missing>"):
+                out[f"{rel}:{k}"] = (before.get(k, "<missing>"), after.get(k, "<missing>"))
+    return out
+
+
+def _only_change(where: str, ok: Callable[[object], bool]) -> Callable[[RunResult, Path], bool]:
+    """Passes iff exactly `where` ("file:key") changed, to a value `ok` accepts."""
+    def check(res: RunResult, root: Path) -> bool:
+        changes = config_changes(root, OPS_DIR)
+        return set(changes) == {where} and ok(changes[where][1])
+    return check
+
+
+def _nothing_changed(res: RunResult, root: Path) -> bool:
+    return not config_changes(root, OPS_DIR) and _head_subject(root) == "seed"
+
+
+def _num(pred: Callable[[float], bool]) -> Callable[[object], bool]:
+    return lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and pred(v)
+
+
 @dataclass(frozen=True)
 class Scenario:
     key: str
     name: str
     prompt: str
     check: Callable[[RunResult, Path], bool]
+    seed: Path = SEED_DIR
 
 
 SCENARIOS = {s.key: s for s in [
@@ -112,6 +151,25 @@ SCENARIOS = {s.key: s for s in [
              "that fixes them.", _ok_open_ended),
     Scenario("D", "no tools needed",
              "What is the capital of France?", _ok_no_tools),
+    # workspace-ops: several configs and logs, decoy errors. Each asks to apply,
+    # and passes only on the exact end state of every config file.
+    Scenario("E", "ops: log -> JSON limit",
+             "Check logs/worker.log for errors and fix the config, then apply it.",
+             _only_change("services/worker.json:limits.max_payload_mb", _num(lambda v: v >= 12.4)),
+             OPS_DIR),
+    Scenario("F", "ops: symptom only, pick log+config",
+             "The API keeps returning 503 errors. Look at the logs and fix the config, "
+             "then apply it.",
+             _only_change("services/api.yaml:database.pool_size", _num(lambda v: v > 10)),
+             OPS_DIR),
+    Scenario("G", "ops: directed list key",
+             "In services/worker.json set the concurrency of the reports queue to 4, "
+             "then apply it.",
+             _only_change("services/worker.json:queues.1.concurrency", lambda v: v == 4),
+             OPS_DIR),
+    Scenario("H", "ops: errors config can't fix",
+             "Check logs/auth.log. If a config change would fix the errors, apply it.",
+             _nothing_changed, OPS_DIR),
 ]}
 
 
@@ -144,21 +202,21 @@ class Outcome:
     result: RunResult
     client: TimedClient
     tools: list[str] = field(default_factory=list)
-    config_ok: bool = True  # app.yaml still parses and passes its schema after the run
+    config_ok: bool = True  # every config file still parses and passes its schema
 
 
 def run_scenario(scenario: Scenario, system_prompt: str | None = None) -> Outcome:
     """One run in a fresh workspace; applies are auto-approved so the check sees
     what the model would do if you said yes."""
-    with seeded_workspace() as root:
+    with seeded_workspace(scenario.seed) as root:
         client = TimedClient()
         agent = Agent(build_registry("workspace", workspace=str(root), client=client), client=client,
                       approve=lambda tool, args: True, tool_policy="",
                       system_prompt=system_prompt)
         res = agent.run(scenario.prompt)
-        cfg = root / "app.yaml"
         try:
-            config_ok = not ce.validate(ce.parse(cfg.read_text(), "yaml"), cfg)[0]
+            config_ok = not any(ce.validate(ce.parse(f.read_text(), ce.config_format(f)), f)[0]
+                                for f in _configs(root))
         except ce.ConfigError:
             config_ok = False
         return Outcome(scenario.check(res, root), res, client, [s.tool for s in res.steps],

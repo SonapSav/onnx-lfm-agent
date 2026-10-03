@@ -9,7 +9,7 @@ from typing import Any, Callable
 from .client import make_client
 from .config import settings
 from .prompts import BUILTIN, build_system_prompt
-from .tools import CURRENT_RUN, Registry, Tool, parse_policy_spec
+from .tools import CURRENT_REQUEST, CURRENT_RUN, Registry, Tool, parse_policy_spec
 
 log = logging.getLogger(__name__)
 
@@ -82,11 +82,12 @@ class Agent:
         return policies
 
     def run(self, user_text: str, history: list | None = None) -> RunResult:
-        token = CURRENT_RUN.set(uuid.uuid4().hex)
+        run, request = CURRENT_RUN.set(uuid.uuid4().hex), CURRENT_REQUEST.set(user_text)
         try:
             return self._run(user_text, history)
         finally:
-            CURRENT_RUN.reset(token)
+            CURRENT_RUN.reset(run)
+            CURRENT_REQUEST.reset(request)
 
     def _run(self, user_text: str, history: list | None) -> RunResult:
         messages = list(history or [])
@@ -136,10 +137,20 @@ class Agent:
             return Step(name, args, "invalid_args", {
                 "error": f"invalid arguments for tool '{name}'",
                 "details": errors, "expected": tool.parameters})
+        # Schemas don't forbid extra properties, and the model invents some
+        # (seen: apply_config_change(proposal_id=..., proposal_description=...)).
+        # Drop them rather than fail the call with a TypeError.
+        declared = tool.parameters.get("properties")
+        extra = sorted(set(args) - set(declared)) if isinstance(args, dict) and declared is not None else []
+        if extra:
+            args = {k: v for k, v in args.items() if k not in extra}
         if denial := self._policy_denial(tool, args):
             return Step(name, args, "denied", {"error": denial})
         try:
-            return Step(name, args, "executed", tool.func(**args))
+            result = tool.func(**args)
+            if extra and isinstance(result, dict):
+                result = {**result, "ignored_arguments": extra}
+            return Step(name, args, "executed", result)
         except Exception as e:  # noqa: BLE001 — surface any tool error to the model
             return Step(name, args, "tool_error", {"error": f"{type(e).__name__}: {e}"})
 

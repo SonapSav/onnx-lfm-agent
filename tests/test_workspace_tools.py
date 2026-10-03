@@ -36,10 +36,22 @@ def root(tmp_path):
 
 
 @pytest.fixture
-def tools(root):
+def model_replies():
+    """Scripted replies for the harness's own model calls (none by default:
+    a test that triggers one without scripting it fails, never hits the network)."""
+    return []
+
+
+@pytest.fixture
+def tools(root, model_replies):
     r = Registry()
-    wt.register(r, Workspace(root))
+    wt.register(r, Workspace(root), client=FakeClient(model_replies))
     return {t.name: t for t in r}
+
+
+def pick(label):
+    """The harness asking the model which setting it meant."""
+    return reply(None, tool_call(json.dumps({"key": label}), name="choose_setting", id="k"))
 
 
 def call(tools, name, **kw):
@@ -222,11 +234,32 @@ def test_propose_bad_requests(tools, kw, match):
         call(tools, "propose_config_change", path="app.yaml", **kw)
 
 
+@pytest.mark.parametrize("model_replies", [[pick("none")]])
 def test_new_key_rejected_by_schema_gets_hint(tools):
+    """Unknown key the schema won't take: the model is asked which setting it
+    meant; "none" leaves the hint for it to act on."""
     out = call(tools, "propose_config_change", path="app.yaml", key="server.timeout", value=30)
     assert not out["valid"] and out["proposal_id"] is None
     assert out["hint"] == ("server.timeout is a new key; "
                            "keys under server: host, port, request_timeout_s")
+    assert "unknown_key" not in out
+
+
+@pytest.mark.parametrize("model_replies", [[pick("server.request_timeout_s")]])
+def test_unknown_key_is_matched_to_the_setting_meant(tools, model_replies):
+    out = call(tools, "propose_config_change", path="app.yaml", key="server.timeout", value=30)
+    assert out["valid"] and out["proposal_id"]
+    assert "+  request_timeout_s: 30" in out["diff"]
+    assert "matched it to server.request_timeout_s" in out["note"]
+
+
+def test_new_key_the_schema_allows_needs_no_model_call(root):
+    (root / "app.schema.json").unlink()
+    git(root, "commit", "-qam", "no schema")
+    r = Registry()
+    wt.register(r, Workspace(root), client=FakeClient([]))
+    out = r.get("propose_config_change").func(path="app.yaml", key="server.workers", value=4)
+    assert out["valid"] and "+  workers: 4" in out["diff"]
 
 
 def test_propose_refuses_non_config_and_dirty_files(tools, root):
@@ -278,12 +311,29 @@ def test_longest_matching_file_wins(tools, root):
     assert out["path"] == "conf/app.yaml"
 
 
-def test_ambiguous_missing_path_is_refused(tools, root):
+@pytest.fixture
+def two_configs(root):
     (root / "other.json").write_text('{"a": 1}\n')
     git(root, "add", "-A")
     git(root, "commit", "-q", "-m", "other")
-    with pytest.raises(WorkspaceError, match="path is required.*candidates: app.yaml, other.json"):
+
+
+@pytest.mark.parametrize("model_replies", [[pick("app.yaml: server.port")]])
+def test_ambiguous_missing_path_is_resolved_from_all_files(two_configs, tools, model_replies):
+    out = call(tools, "propose_config_change", key="server.port", value=81)
+    assert out["path"] == "app.yaml" and "+  port: 81" in out["diff"]
+
+
+@pytest.mark.parametrize("model_replies", [[pick("none")]])
+def test_ambiguous_path_and_no_match_is_refused(two_configs, tools):
+    with pytest.raises(WorkspaceError, match="no setting matches 'server.port'"):
         call(tools, "propose_config_change", key="server.port", value=81)
+
+
+@pytest.mark.parametrize("model_replies", [[pick("app.yaml: server.port")]])
+def test_invented_path_counts_as_omitted(two_configs, tools):
+    out = call(tools, "propose_config_change", path="config.yaml", key="server.port", value=81)
+    assert out["path"] == "app.yaml" and "config.yaml does not exist" in out["note"]
 
 
 # --- apply / rollback --------------------------------------------------------

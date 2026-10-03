@@ -1,0 +1,11 @@
+{
+  "limits": {
+    "max_payload_mb": 8,
+    "max_retries": 3
+  },
+  "queues": [
+    {"name": "emails", "concurrency": 2},
+    {"name": "reports", "concurrency": 1}
+  ],
+  "log_level": "info"
+}

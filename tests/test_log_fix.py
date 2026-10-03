@@ -77,7 +77,7 @@ def test_proposes_the_chosen_key_and_value(root):
     assert "server.request_timeout_s = 5  # number, 1..120; upstream calls to the billing API" in key_prompt
     assert client.sent[0]["tools"][0]["function"]["parameters"]["properties"]["key"]["enum"] == [
         "server.host", "server.port", "server.request_timeout_s", "database.url",
-        "database.pool_size", "logging.level"]
+        "database.pool_size", "logging.level", "none"]
     value_param = client.sent[1]["tools"][0]["function"]["parameters"]["properties"]["value"]
     assert value_param == {"type": "number", "minimum": 1, "maximum": 120, "description": "New value"}
 
@@ -117,11 +117,36 @@ def test_no_errors_in_log_means_no_model_call(root):
     assert client.sent == []
 
 
-def test_ambiguous_log_file_is_refused_with_candidates(root):
-    (root / "logs" / "other.log").write_text("ERROR x\n")
-    tool, _ = fix_tool(root, [])
-    with pytest.raises(WorkspaceError, match="which log file.*logs/app.log, logs/other.log"):
-        tool.func()
+def test_several_logs_the_model_picks_one(root):
+    (root / "logs" / "other.log").write_text("ERROR disk full\n")
+    tool, client = fix_tool(root, [
+        reply(None, tool_call(json.dumps({"path": "logs/app.log"}), name="choose_log", id="l")),
+        choose("server.request_timeout_s"), value(15)])
+    out = tool.func(log_path="logs/missing.log")  # invented path: treated as omitted
+    assert out["log"] == "logs/app.log" and out["proposal_id"] == "p1"
+    shown = client.sent[0]["messages"][0]["content"]
+    assert "logs/other.log:\n  ERROR disk full" in shown
+    assert client.sent[0]["tools"][0]["function"]["parameters"]["properties"]["path"]["enum"] == [
+        "logs/app.log", "logs/other.log"]
+
+
+def test_none_means_no_proposal(root):
+    tool, client = fix_tool(root, [choose("none")])
+    out = tool.func()
+    assert out["proposal_id"] is None and "no config change" in out["result"]
+    assert "Do not propose" in out["next"]
+    assert len(client.sent) == 1  # no value step
+
+
+def test_several_configs_key_choice_spans_files(root):
+    (root / "other.json").write_text('{"workers": 2}\n')
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "other")
+    tool, client = fix_tool(root, [choose("other.json: workers"), value(4)])
+    out = tool.func(config_path="nope.yaml")
+    assert out["path"] == "other.json" and out["valid"]
+    enum = client.sent[0]["tools"][0]["function"]["parameters"]["properties"]["key"]["enum"]
+    assert "app.yaml: server.request_timeout_s" in enum and "other.json: workers" in enum
 
 
 def test_enum_key_gets_an_enum_value(root):
@@ -181,3 +206,97 @@ def test_a_new_run_is_not_blocked_by_an_earlier_runs_proposal(root):
     agent.run("Propose logging.level debug.")
     second = agent.run("Check the logs and propose a fix.")
     assert second.steps[0].status == "executed" and second.steps[0].result["proposal_id"] == "p2"
+
+
+def test_extra_args_dropped_and_invented_ids_named(root):
+    client = FakeClient([
+        reply(None, tool_call(json.dumps({"key": "server.request_timeout_s", "value": 15}),
+                              name="propose_config_change", id="p")),
+        reply(None, tool_call(json.dumps({"proposal_id": "p123"}), name="apply_config_change", id="a")),
+        reply(None, tool_call(json.dumps({"proposal_id": "p1", "proposal_description": "raise it"}),
+                              name="apply_config_change", id="b")),
+        reply("Applied."),
+    ])
+    agent = Agent(build_registry("workspace", workspace=str(root), client=client), client=client,
+                  approve=lambda t, a: True, tool_policy="")
+    result = agent.run("Set server.request_timeout_s to 15 and apply it.")
+
+    invented, applied = result.steps[1], result.steps[2]
+    assert invented.status == "tool_error"
+    assert "p123" in invented.result["error"] and "pending in this conversation: p1" in invented.result["error"]
+    assert applied.status == "executed" and applied.result["ignored_arguments"] == ["proposal_description"]
+    assert "request_timeout_s: 15" in (root / "app.yaml").read_text()
+
+
+@pytest.mark.parametrize("lines, current, schema, floor", [
+    (["ERROR job 1832 rejected: payload 12.4 MB exceeds max_payload_mb=8"], 8,
+     {"type": "number", "minimum": 1, "maximum": 100}, 12.4),   # the id 1832 is out of range
+    (["ERROR timed out after 5s (request_timeout_s=5)"], 5,
+     {"type": "number", "maximum": 120}, None),                  # nothing above the current
+    (["ERROR payload 12.4 MB exceeds max_payload_mb=8"], 8, {"type": "number"}, None),  # unbounded
+    (["ERROR payload 12.4 MB exceeds max_payload_mb=8"], "8", {"maximum": 100}, None),  # not numeric
+])
+def test_reported_above(lines, current, schema, floor):
+    assert log_fix._reported_above(lines, current, schema) == floor
+
+
+def test_value_below_what_the_log_reports_is_refused(root):
+    (root / "logs" / "app.log").write_text(
+        "2026-10-02 10:05:30 ERROR job 1832 rejected: payload 12.4 MB exceeds "
+        "request_timeout_s=5\n")
+    tool, client = fix_tool(root, [choose("server.request_timeout_s"), value(9), value(15)])
+    out = tool.func()
+    assert "+  request_timeout_s: 15" in out["diff"]
+    error = json.loads(client.sent[-1]["messages"][-1]["content"])["error"]
+    assert error == "the log reports 12.4 for server.request_timeout_s; choose at least 12.4"
+
+
+def test_log_matching_the_request_is_picked_by_code(root):
+    (root / "logs" / "worker.log").write_text("ERROR job rejected: payload too large\n")
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "worker log")
+    client = FakeClient([choose("server.request_timeout_s"), value(15)])  # no choose_log call
+    r = Registry()
+    wt.register(r, Workspace(root), client=client)
+    from onnx_lfm_agent.tools import CURRENT_REQUEST
+    token = CURRENT_REQUEST.set("The billing API keeps timing out. Check the logs and fix it.")
+    try:
+        out = r.get("propose_fix_from_logs").func()
+    finally:
+        CURRENT_REQUEST.reset(token)
+    assert out["log"] == "logs/app.log"
+    assert [c["tools"][0]["function"]["name"] for c in client.sent] == ["choose_setting", "set_value"]
+
+
+def test_pending_proposal_blocks_proposals_for_other_files_too(root):
+    (root / "other.json").write_text('{"workers": 2}\n')
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "other")
+    client = FakeClient([
+        reply(None, tool_call(json.dumps({"path": "app.yaml", "key": "server.port", "value": 81}),
+                              name="propose_config_change", id="p")),
+        reply(None, tool_call(json.dumps({"path": "other.json", "key": "workers", "value": 4}),
+                              name="propose_config_change", id="q")),
+        reply("Proposed."),
+    ])
+    agent = Agent(build_registry("workspace", workspace=str(root), client=client), client=client,
+                  tool_policy="")
+    result = agent.run("Set server.port to 81.")
+    assert [s.status for s in result.steps] == ["executed", "tool_error"]
+    assert "p1 is already proposed" in result.steps[1].result["error"]
+
+
+def test_proposing_the_same_change_again_returns_the_pending_one(root):
+    same = json.dumps({"key": "server.request_timeout_s", "value": 15})
+    client = FakeClient([
+        reply(None, tool_call(same, name="propose_config_change", id="p")),
+        reply(None, tool_call(same, name="propose_config_change", id="q")),
+        reply(None, tool_call('{"proposal_id": "p1"}', name="apply_config_change", id="a")),
+        reply("Applied."),
+    ])
+    agent = Agent(build_registry("workspace", workspace=str(root), client=client), client=client,
+                  approve=lambda t, a: True, tool_policy="")
+    result = agent.run("Set server.request_timeout_s to 15, then apply it.")
+    assert [s.status for s in result.steps] == ["executed", "executed", "executed"]
+    assert result.steps[1].result["proposal_id"] == "p1"
+    assert "already proposed as p1" in result.steps[1].result["note"]

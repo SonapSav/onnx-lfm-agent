@@ -1,0 +1,12 @@
+# Public API service. onnx-lfm-agent edits it via propose -> apply.
+server:
+  port: 8080
+  request_timeout_s: 30
+
+database:
+  host: db.internal
+  pool_size: 10        # max open connections to Postgres
+  pool_timeout_s: 5    # how long a request waits for a free connection
+
+cache:
+  ttl_s: 300

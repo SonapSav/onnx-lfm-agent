@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["server", "database", "cache"],
+  "properties": {
+    "server": {
+      "type": "object",
+      "required": ["port", "request_timeout_s"],
+      "properties": {
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "request_timeout_s": {"type": "number", "minimum": 1, "maximum": 300}
+      },
+      "additionalProperties": false
+    },
+    "database": {
+      "type": "object",
+      "required": ["host", "pool_size", "pool_timeout_s"],
+      "properties": {
+        "host": {"type": "string"},
+        "pool_size": {"type": "integer", "minimum": 1, "maximum": 200},
+        "pool_timeout_s": {"type": "number", "minimum": 1, "maximum": 60}
+      },
+      "additionalProperties": false
+    },
+    "cache": {
+      "type": "object",
+      "required": ["ttl_s"],
+      "properties": {"ttl_s": {"type": "integer", "minimum": 0, "maximum": 86400}},
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

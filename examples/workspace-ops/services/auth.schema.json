@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["auth"],
+  "properties": {
+    "auth": {
+      "type": "object",
+      "required": ["session_ttl_min", "max_failed_logins", "lockout_min"],
+      "properties": {
+        "session_ttl_min": {"type": "integer", "minimum": 5, "maximum": 1440},
+        "max_failed_logins": {"type": "integer", "minimum": 3, "maximum": 10},
+        "lockout_min": {"type": "integer", "minimum": 1, "maximum": 1440}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

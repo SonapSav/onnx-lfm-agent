@@ -1,0 +1,5 @@
+# Login policy. Security-sensitive: change only for a real policy reason.
+auth:
+  session_ttl_min: 60
+  max_failed_logins: 5   # failed attempts before the account locks
+  lockout_min: 15

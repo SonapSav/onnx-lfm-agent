@@ -23,7 +23,7 @@ def api_up():
         pytest.skip(f"onnx-lfm-api not reachable at {settings.url}: {e}")
 
 
-@pytest.mark.parametrize("key", ["A", "C", "D"])
+@pytest.mark.parametrize("key", ["A", "C", "D", "E", "F", "G", "H"])
 def test_reliable_scenarios(key):
     outcome = run_scenario(SCENARIOS[key])
     assert outcome.passed, (f"{key} failed: tools={outcome.tools} "

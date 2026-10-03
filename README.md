@@ -106,7 +106,8 @@ Override per tool with `LFM_TOOL_POLICY="name=allow,other=deny"`.
 - `toolsets.py` — builds the registry from `LFM_TOOLSETS`.
 - `workspace.py` — the sandbox (path resolution) + git helper.
 - `workspace_tools.py` — file tools, propose/apply, operator rollback.
-- `log_fix.py` — the `propose_fix_from_logs` workflow (evidence, key list, two narrow model decisions).
+- `log_fix.py` — the `propose_fix_from_logs` workflow (evidence, key list, two narrow model decisions)
+  and the setting resolver `propose_config_change` uses for unknown keys / ambiguous files.
 - `evals.py` — live eval scenarios (A–D) shared by `scripts/eval_live.py` and the integration tests.
 - `config_edit.py` — one-key JSON/YAML edits (comment/indent-preserving), schema validation, diff.
 - `example_tools.py` — demo tools (time, add), toolset `demo`.

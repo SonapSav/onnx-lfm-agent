@@ -68,9 +68,25 @@ lifecycle, deps, and trust boundary (this one *executes tools*; the API only
   pending `pN`) if this run already has an unapplied proposal for the same file. Without it, directed A ("set X to
   15, then apply") sometimes also called the tool, got 10 as `p2` and applied that (A 10/12). A "use only when the
   user did not name the setting" description didn't help (still fix calls); the tool error did (A 12/12).
+  The guard is now **one open proposal per run** (any file; a stray second proposal once resolved to another file),
+  and re-proposing the *identical* change returns the pending one instead of an error (A stalled on that error).
+- **Harness pieces added for workspace-ops** (each fixed a failure seen live; `log_fix.py` / `workspace_tools.py`):
+  `CURRENT_REQUEST` (the user's message) feeds the inner decisions; invented paths (`config.yaml`, `logs/app.log`)
+  count as omitted; several configs → the key enum spans files (`services/worker.json: limits.max_payload_mb`);
+  list items are named in the path (`queues.reports.concurrency`, maps back to `queues.1`; bare indices and
+  `[reports]` suffixes got mangled); settings named in / sharing a word with the error lines go first, marked;
+  `none` option (no config fix → nothing proposed); `propose_config_change` with an ambiguous file or an unknown key
+  the schema rejects → model picks the real setting (`resolve_setting`); the log is picked **by code** when exactly
+  one log shares the request's distinguishing words (the model chose worker.log for "API 503s" 6/6 under every
+  phrasing); **value floor**: a number a log line naming a *bounded* numeric setting reports above its current value
+  (12.4 vs max_payload_mb=8) — the model chose 9/10 under every phrasing; Agent drops undeclared tool args
+  (`ignored_arguments`); apply with an invented id names the run's real pending ids.
 - `config_edit.py` — one dotted key per edit (ruamel round-trip keeps YAML comments/indent; JSON keeps indent),
   schema = sibling `<stem>.schema.json`, unified diff; errors list existing keys so the model can retry.
 - `examples/workspace/` — demo `app.yaml` + schema + `logs/app.log` (timeouts); copy to `./workspace` (gitignored, own git repo).
+- `examples/workspace-ops/` — harder eval seed (scenarios E–H): `services/{api.yaml,worker.json,auth.yaml}` + schemas,
+  `logs/{api,worker,auth}.log` with decoys (404, SMTP retry, wrong passwords). Built to break assumptions the first
+  workspace hid: one config file, one log, flat keys.
 - `cli.py` — `lfm-agent` REPL / one-shot, interactive approver for `ask` tools (shows `preview`; EOF → deny), `--rollback`.
 - `evals.py` + `scripts/eval_live.py` — live eval scenarios A–D (directed apply / directed propose / open-ended /
   no-tools) against the real model; fresh temp git workspace per run (seeded from `examples/workspace`, so it never
@@ -85,7 +101,7 @@ lifecycle, deps, and trust boundary (this one *executes tools*; the API only
   `test_integration.py` (`-m integration`, deselected by default via `addopts`; skips if the API is down): asserts
   only what Instruct does reliably (A, D) plus the invariant that `app.yaml` stays schema-valid after B/C runs.
 
-Verified: 109 unit + 5 integration tests pass (live evals 48/48 with the default, prompt off); live: CLI (venv + compose container) and the HTTP service against the running API,
+Verified: 124 unit + 9 integration tests pass (live evals A–H 96/96 with the default, prompt off); live: CLI (venv + compose container) and the HTTP service against the running API,
 including propose → approve → commit → operator rollback on the demo workspace.
 
 ## Roadmap — what to build next (rough priority)
@@ -174,6 +190,10 @@ including propose → approve → commit → operator rollback on the demo works
   prompt **on** (default) A 12 B 9 C 12 D 9 (42/48). The 6th tool flipped the old trade-off: D no longer needs the
   prompt (it was 0/6 without), and the prompt now costs B and D. **Default switched to off** (user, 2026-10-03).
   With the run-scoped guard, prompt off: **A 12 B 12 C 12 D 12 (48/48)**, 0.5–0.7 s/call.
+- **workspace-ops evals** (12 runs each, prompt off, GTX 1660): baseline before the harness pieces above E 0 F 0 G 0
+  H 6 (H "passed" only because every change crashed); now **A–H 12/12 each (96/96)**, 0.5–1.0 s/call. Caveat: the
+  pieces were designed while looking at E–H, so this is not a held-out result — the honest generalization test is a
+  third workspace built *before* any tuning and run once.
   Adding "Answer general questions from your own knowledge." to BASE made it worse (B 1/6, D 1/6 with prompt on) —
   reverted. Live check C also requires nothing but the timeout to have changed (a run that applied port=10 passed
   the old check).

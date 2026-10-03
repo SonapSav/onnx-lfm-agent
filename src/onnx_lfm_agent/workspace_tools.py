@@ -13,6 +13,7 @@ import itertools
 import os
 import threading
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -20,7 +21,7 @@ from . import config_edit as ce
 from . import log_fix
 from .client import make_client
 from .config import settings
-from .tools import CURRENT_RUN, Registry
+from .tools import CURRENT_REQUEST, CURRENT_RUN, Registry
 from .workspace import Workspace, WorkspaceError
 
 MAX_LIST = 200
@@ -62,10 +63,10 @@ class ProposalStore:
                 self._items.popitem(last=False)
             return p
 
-    def pending(self, run: str, path: Path) -> list[Proposal]:
-        """Unapplied proposals for `path` made earlier in agent run `run`."""
+    def pending_in(self, run: str) -> list[Proposal]:
+        """Unapplied proposals made earlier in agent run `run`."""
         with self._lock:
-            return [p for p in self._items.values() if p.run == run and p.path == path]
+            return [p for p in self._items.values() if p.run == run]
 
     def peek(self, proposal_id: str) -> Proposal | None:
         with self._lock:
@@ -151,6 +152,51 @@ def register(r: Registry, ws: Workspace, store: ProposalStore | None = None,
     store = store or ProposalStore()
     r.guidance.extend(GUIDANCE)
 
+    def model() -> tuple:
+        """(client, model, temperature) for the harness's own narrow model calls."""
+        nonlocal client
+        client = client or make_client()
+        return client, settings.model, settings.temperature
+
+    def _refuse_if_pending(same: Callable[[Proposal], bool] | None = None) -> dict | None:
+        """One open proposal per agent run. Live runs: after a good proposal the
+        model proposed again (via either tool, often garbage, sometimes for
+        another file) and applied the newer one. A tool error is what it
+        follows. Applying the pending one frees it (two changes = propose,
+        apply, propose, apply)."""
+        run = CURRENT_RUN.get()
+        prior = store.pending_in(run) if run else []
+        if prior:
+            p = prior[-1]
+            if same and same(p):  # the identical change again: not an error (A stalled on it)
+                return {"path": ws.rel(p.path), "diff": p.diff, "valid": True, "proposal_id": p.id,
+                        "note": f"already proposed as {p.id} in this conversation"}
+            raise WorkspaceError(
+                f"{p.id} is already proposed in this conversation ({p.summary.removeprefix('agent: ')}"
+                f"). Do not propose again: if the user asked to apply it, call apply_config_change "
+                f"with proposal_id {p.id}; otherwise report it.")
+
+    def _locate(path: str, key: str, value, reason: str) -> tuple[str, str, str | None]:
+        """(path, key, note). An invented file name counts as omitted; when the
+        file is still ambiguous, the model picks the real setting from all of them
+        (with several config files it never supplied a path, even when told the
+        candidates)."""
+        bad = None
+        if path and not ws.resolve(path).is_file():
+            bad, path = f"{path} does not exist", ""
+        try:
+            path, key, note = _infer_path(ws, path, key)
+        except WorkspaceError:
+            configs = _config_files(ws)
+            if len(configs) < 2:
+                raise
+            s = log_fix.resolve_setting(ws, *model(), configs, CURRENT_REQUEST.get(), key, value, reason)
+            if s is None:
+                raise WorkspaceError(f"no setting matches {key!r} in {', '.join(configs)}; "
+                                     "tell the user") from None
+            path, key, note = s.file, s.key, f"{key!r} is not a setting; matched it to {s.key} in {s.file}"
+        return path, key, "; ".join(filter(None, (bad, note))) or None
+
     def _preview(args: dict) -> str:
         prop = store.peek(args.get("proposal_id", ""))
         return f"{prop.summary}\n{prop.diff}" if prop else "(unknown proposal_id)"
@@ -235,7 +281,22 @@ def register(r: Registry, ws: Workspace, store: ProposalStore | None = None,
     )
     def propose_config_change(key: str, path: str = "", value=ce.DELETE, delete: bool = False,
                               reason: str = "") -> dict:
-        path, key, inferred = _infer_path(ws, path, key)
+        path, key, inferred = _locate(path, key, value, reason)
+        result = _propose(path, key, value, delete, reason, inferred, check_pending=True)
+        if result.pop("unknown_key", False):
+            # The key doesn't exist and the schema won't take it as a new one:
+            # let the model pick the setting it meant in that file (seen:
+            # "services.worker.concurrency" for queues.1.concurrency).
+            s = log_fix.resolve_setting(ws, *model(), [result["path"]], CURRENT_REQUEST.get(),
+                                        key, value, reason)
+            if s is not None:
+                note = f"{key!r} is not a setting; matched it to {s.key}"
+                return _propose(s.file, s.key, value, delete, reason,
+                                "; ".join(filter(None, (inferred, note))), check_pending=True)
+        return result
+
+    def _propose(path: str, key: str, value, delete: bool, reason: str,
+                 inferred: str | None, check_pending: bool = False) -> dict:
         p = ws.resolve(path)
         fmt = ce.config_format(p)
         if not p.is_file():
@@ -271,6 +332,8 @@ def register(r: Registry, ws: Workspace, store: ProposalStore | None = None,
                 note = f"converted {value!r} (string) to {alt!r} {why}"
         new = ce.dump(data, fmt, old)
         diff = ce.diff(old, new, rel)
+        if check_pending and (repeat := _refuse_if_pending(lambda q: q.path == p and q.new_text == new)):
+            return repeat
         note = "; ".join(filter(None, (inferred, note))) or None
         result = {"path": rel, "diff": diff or "(no change)", "valid": not errors,
                   "errors": errors, "schema": schema or "none found (only checked that it parses)"}
@@ -282,6 +345,7 @@ def register(r: Registry, ws: Workspace, store: ProposalStore | None = None,
             if ce.lookup(original, key) is ce.MISSING:  # a new key the schema may not allow
                 node = ce.lookup(original, parent) if parent else original
                 result["hint"] = f"{key} is a new key; {ce.existing_keys(node, parent)}"
+                result["unknown_key"] = True
         if errors or not diff:
             result["proposal_id"] = None  # nothing to apply
             return result
@@ -301,23 +365,21 @@ def register(r: Registry, ws: Workspace, store: ProposalStore | None = None,
         }},  # both inferred when omitted: the only .log / config file
     )
     def propose_fix_from_logs(log_path: str = "", config_path: str = "") -> dict:
-        nonlocal client
-        log_path = log_path or _only([ws.rel(p) for p, is_dir in _walk(ws, ws.root)
-                                      if not is_dir and p.suffix.lower() == ".log"], "log file")
-        config_path = config_path or _only(_config_files(ws), "config file")
+        request = CURRENT_REQUEST.get()
+        # Invented paths (seen: config.yaml, logs/app.log) count as omitted.
+        if not (log_path and ws.resolve(log_path).is_file()):
+            logs = [ws.rel(p) for p, is_dir in _walk(ws, ws.root)
+                    if not is_dir and p.suffix.lower() == ".log"]
+            log_path = log_fix.choose_log(ws, *model(), logs, request)
+        if config_path and ws.resolve(config_path).is_file():
+            configs = [ws.rel(ws.resolve(config_path))]
+        else:
+            configs = _config_files(ws)  # several: the key choice also picks the file
         # Live runs: asked "set X to 15, then apply", the model sometimes also
         # called this tool (the request mentions logs), got a second proposal
         # (10) and applied that one. A tool error is what it follows.
-        run = CURRENT_RUN.get()
-        if run and (prior := store.pending(run, ws.resolve(config_path))):
-            p = prior[-1]
-            raise WorkspaceError(
-                f"{p.id} is already proposed in this conversation ({p.summary.removeprefix('agent: ')}"
-                f"). Do not propose again: if the user asked to apply it, call apply_config_change "
-                f"with proposal_id {p.id}; otherwise report it.")
-        client = client or make_client()
-        return log_fix.run(ws, client, settings.model, settings.temperature,
-                           propose_config_change, log_path, config_path)
+        _refuse_if_pending()
+        return log_fix.run(ws, *model(), propose_config_change, log_path, configs, request)
 
     @r.tool(
         description=("Apply a proposal from propose_config_change: writes the file and "
@@ -330,6 +392,12 @@ def register(r: Registry, ws: Workspace, store: ProposalStore | None = None,
     )
     def apply_config_change(proposal_id: str) -> dict:
         with ws.lock:
+            run = CURRENT_RUN.get()
+            if store.peek(proposal_id) is None and run:
+                # Seen: invented ids ("p123"). Name the real ones from this run.
+                mine = [p.id for p in store.pending_in(run)]
+                raise WorkspaceError(f"unknown or already used proposal_id: {proposal_id}; "
+                                     f"pending in this conversation: {', '.join(mine) or 'none'}")
             prop = store.pop(proposal_id)
             rel = ws.rel(prop.path)
             if not prop.path.is_file() or _sha256(prop.path) != prop.base_sha256:

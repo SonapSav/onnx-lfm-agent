@@ -5,6 +5,12 @@ Scenarios (src/onnx_lfm_agent/evals.py):
   B  "propose X"                     -> valid proposal, NOT applied
   C  open-ended "check logs and fix" -> valid proposal raising the timeout
   D  "capital of France?"            -> answered without tools
+  examples/workspace-ops (3 configs, 3 logs, decoy errors; each asks to apply,
+  checked on the end state of every config file):
+  E  "check worker.log and fix"      -> only limits.max_payload_mb, >= the 12.4 MB logged
+  F  "the API returns 503s" (no file named) -> only database.pool_size in api.yaml, raised
+  G  "set the reports queue's concurrency to 4" -> only queues.1.concurrency = 4
+  H  "check auth.log; fix if config helps" (wrong passwords) -> nothing changed
 
 Uses LFM_URL / LFM_API_KEY / LFM_TEMPERATURE from the environment or ./.env.
 Each run uses a fresh temp git workspace; applies are auto-approved.
@@ -40,7 +46,7 @@ SHORT = {"propose_config_change": "propose", "apply_config_change": "apply", "pr
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("-n", "--runs", type=int, default=6, help="runs per scenario (default 6)")
-    ap.add_argument("-s", "--scenarios", default="A,B,C,D", help="comma-separated keys")
+    ap.add_argument("-s", "--scenarios", default=",".join(SCENARIOS), help="comma-separated keys")
     ap.add_argument("--compare-prompt", action="store_true",
                     help="run each scenario with the system prompt off, then on")
     ap.add_argument("--json", type=Path, help="also write results here")
