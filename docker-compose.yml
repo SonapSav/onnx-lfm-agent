@@ -1,19 +1,52 @@
+# Model-API settings shared by both services.
+x-agent-env: &agent-env
+  # The API container by name on its compose network (127.0.0.1 would be
+  # this container itself).
+  LFM_URL: "${LFM_URL:-http://onnx-lfm-api:8383/v1}"
+  # Secret is read from ./.env (gitignored), never hardcoded here. Must
+  # match the API's LFM_API_KEY; empty if the API has auth disabled.
+  LFM_API_KEY: "${LFM_API_KEY:-}"
+  LFM_MAX_ROUNDS: "${LFM_MAX_ROUNDS:-6}"
+  LFM_TEMPERATURE: "${LFM_TEMPERATURE:-0.1}"
+  # Per-tool overrides, e.g. "some_tool=allow". Empty = code defaults.
+  LFM_TOOL_POLICY: "${LFM_TOOL_POLICY:-}"
+
 services:
+  # HTTP service: `docker compose up -d`. POST /run with X-API-Key.
+  onnx-lfm-agent-server:
+    build: .
+    image: onnx-lfm-agent:latest
+    container_name: onnx-lfm-agent-server
+    entrypoint: ["lfm-agent-server"]
+    environment:
+      <<: *agent-env
+      # Required: the server refuses to start without it (it executes tools).
+      LFM_AGENT_API_KEY: "${LFM_AGENT_API_KEY:-}"
+      LFM_HOST: "0.0.0.0"
+      LFM_PORT: "8384"
+    ports:
+      # Host loopback only — this endpoint executes tools. Drop the
+      # "127.0.0.1:" prefix to expose it on the LAN.
+      - "127.0.0.1:8384:8384"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8384/health', timeout=3).status==200 else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - lfm
+
+  # Interactive CLI, not started by `up`:
+  #   docker compose run --rm onnx-lfm-agent ["one-shot prompt"]
   onnx-lfm-agent:
     build: .
     image: onnx-lfm-agent:latest
-    # Interactive CLI, not a daemon: use `docker compose run --rm onnx-lfm-agent [prompt]`.
+    profiles: ["cli"]
     stdin_open: true
     tty: true
-    environment:
-      # The API container by name on its compose network (127.0.0.1 would be
-      # this container itself).
-      LFM_URL: "${LFM_URL:-http://onnx-lfm-api:8383/v1}"
-      # Secret is read from ./.env (gitignored), never hardcoded here. Must
-      # match the API's LFM_API_KEY; empty if the API has auth disabled.
-      LFM_API_KEY: "${LFM_API_KEY:-}"
-      LFM_MAX_ROUNDS: "${LFM_MAX_ROUNDS:-6}"
-      LFM_TEMPERATURE: "${LFM_TEMPERATURE:-0.1}"
+    environment: *agent-env
     networks:
       - lfm
 

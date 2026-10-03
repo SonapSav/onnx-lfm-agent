@@ -15,5 +15,14 @@ class Settings(BaseSettings):
     max_rounds: int = 6                     # safety cap on tool-call iterations
     temperature: float = 0.1                # mirrors the API default (Liquid-recommended)
 
+    # Per-tool policy overrides: "name=allow|ask|deny,..." (LFM_TOOL_POLICY).
+    # Defaults: read-only tools allow, dangerous tools ask.
+    tool_policy: str = ""
+
+    # --- HTTP service (lfm-agent-server) ---
+    agent_api_key: str = ""                 # LFM_AGENT_API_KEY — required; clients use it
+    host: str = "127.0.0.1"                 # LFM_HOST — compose sets 0.0.0.0 in-container
+    port: int = 8384                        # LFM_PORT
+
 
 settings = Settings()

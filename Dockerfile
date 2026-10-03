@@ -27,5 +27,8 @@ COPY --from=build --chown=agent:agent /app/.venv /app/.venv
 USER agent
 WORKDIR /home/agent
 
+# HTTP service port (lfm-agent-server; compose overrides the entrypoint).
+EXPOSE 8384
+
 # No args -> interactive REPL (needs `-it`); args -> one-shot prompt.
 ENTRYPOINT ["lfm-agent"]

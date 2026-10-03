@@ -8,7 +8,7 @@ from .tools import Tool
 
 
 def _approve(tool: Tool, args: dict) -> bool:
-    print(f"  [approve] {tool.name}({args})  — this tool is marked dangerous")
+    print(f"  [approve] {tool.name}({args})  — this tool's policy is 'ask'")
     try:
         return input("  run it? [y/N] ").strip().lower() in {"y", "yes"}
     except EOFError:
@@ -23,8 +23,7 @@ def main() -> None:
     agent = Agent(registry, approve=_approve)
 
     if args.prompt:
-        answer, _ = agent.run(" ".join(args.prompt))
-        print(answer)
+        print(agent.run(" ".join(args.prompt)).answer)
         return
 
     print(f"onnx-lfm-agent | {len(registry)} tools loaded | /exit to quit")
@@ -39,8 +38,9 @@ def main() -> None:
             continue
         if user in {"/exit", "/quit"}:
             break
-        answer, history = agent.run(user, history)
-        print("bot>", answer)
+        result = agent.run(user, history)
+        history = result.messages
+        print("bot>", result.answer)
 
 
 if __name__ == "__main__":
