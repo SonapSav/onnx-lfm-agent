@@ -87,6 +87,12 @@ lifecycle, deps, and trust boundary (this one *executes tools*; the API only
 - `examples/workspace-ops/` — harder eval seed (scenarios E–H): `services/{api.yaml,worker.json,auth.yaml}` + schemas,
   `logs/{api,worker,auth}.log` with decoys (404, SMTP retry, wrong passwords). Built to break assumptions the first
   workspace hid: one config file, one log, flat keys.
+- `examples/workspace-heldout/` — **held-out** eval (I1–I8, `scenarios.json` + `DESIGN.md` with the evidence chain),
+  written by a fresh sub-agent that never saw the agent's code: SMTP relay + backup runner + metrics shipper, 4 configs
+  (YAML/JSON, lists everywhere), 4 logs with decoys. Run: `scripts/eval_live.py --scenario-file
+  examples/workspace-heldout/scenarios.json`. `scenarios.json`/`DESIGN.md` are never copied into the agent's
+  workspace (`evals.EVAL_ONLY`; the first run leaked them). **Now seen** — don't tune against it and call it held-out;
+  a real retest needs a new workspace from a new designer.
 - `cli.py` — `lfm-agent` REPL / one-shot, interactive approver for `ask` tools (shows `preview`; EOF → deny), `--rollback`.
 - `evals.py` + `scripts/eval_live.py` — live eval scenarios A–D (directed apply / directed propose / open-ended /
   no-tools) against the real model; fresh temp git workspace per run (seeded from `examples/workspace`, so it never
@@ -101,7 +107,7 @@ lifecycle, deps, and trust boundary (this one *executes tools*; the API only
   `test_integration.py` (`-m integration`, deselected by default via `addopts`; skips if the API is down): asserts
   only what Instruct does reliably (A, D) plus the invariant that `app.yaml` stays schema-valid after B/C runs.
 
-Verified: 124 unit + 9 integration tests pass (live evals A–H 96/96 with the default, prompt off); live: CLI (venv + compose container) and the HTTP service against the running API,
+Verified: 132 unit + 9 integration tests pass (live: A–H 96/96 tuned, held-out I1–I8 change scenarios 0/72); live: CLI (venv + compose container) and the HTTP service against the running API,
 including propose → approve → commit → operator rollback on the demo workspace.
 
 ## Roadmap — what to build next (rough priority)
@@ -194,6 +200,15 @@ including propose → approve → commit → operator rollback on the demo works
   H 6 (H "passed" only because every change crashed); now **A–H 12/12 each (96/96)**, 0.5–1.0 s/call. Caveat: the
   pieces were designed while looking at E–H, so this is not a held-out result — the honest generalization test is a
   third workspace built *before* any tuning and run once.
+- **Held-out baseline (2026-10-03, commit after `1bd0c5e`, GTX 1660, 12 runs each, prompt off): change scenarios
+  0/72** — I1 0 (exact file+key+value!), I2 0, I3 0, I4 0, I5 0, I7 0; no-change I6 11/12, I8 12/12 (partly because
+  attempted changes fail). 2.3–4.1 s/call (4-file setting lists make long prompts). The 96/96 above was overfitting.
+  Observed causes: file folded into the key with dots (`relay.mailrelay.yaml.queue…`; `_infer_path` only knows
+  `relay/mailrelay.yaml.`); valid proposal reached but `max_rounds` ran out before apply; **the final answer claimed
+  "applied" when nothing was** (trust issue: report the real outcome from git, not the model's words); workflow picked
+  the wrong list item (`jobs.2` vs the database job `jobs.1`) and it got applied; I5 every run cut at max_tokens;
+  the value floor assumes raising, but I7 needs lowering ("maximum allowed is 10000"). Likely also the 1.2B ceiling
+  for choosing among ~50 settings across 4 files.
   Adding "Answer general questions from your own knowledge." to BASE made it worse (B 1/6, D 1/6 with prompt on) —
   reverted. Live check C also requires nothing but the timeout to have changed (a run that applied port=10 passed
   the old check).

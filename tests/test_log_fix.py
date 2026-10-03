@@ -300,3 +300,11 @@ def test_proposing_the_same_change_again_returns_the_pending_one(root):
     assert [s.status for s in result.steps] == ["executed", "executed", "executed"]
     assert result.steps[1].result["proposal_id"] == "p1"
     assert "already proposed as p1" in result.steps[1].result["note"]
+
+
+def test_keys_with_dots_are_skipped_not_fatal(root):
+    (root / "labels.json").write_text('{"labels": {"app.kubernetes.io/name": "x"}, "replicas": 2}\n')
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", "labels")
+    index = log_fix.settings_index(Workspace(root), ["labels.json"])
+    assert list(index) == ["replicas"]

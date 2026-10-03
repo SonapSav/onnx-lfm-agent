@@ -7,6 +7,7 @@ so evals never touch ./workspace and work on any machine.
 
 from __future__ import annotations
 
+import json
 import shutil
 import subprocess
 import tempfile
@@ -32,6 +33,12 @@ def _git(root: Path, *args: str) -> str:
                           check=True, capture_output=True, text=True).stdout.strip()
 
 
+# Grading material that lives next to a seed workspace but must never reach the
+# agent (the first held-out run copied it in: answers visible, and scenarios.json
+# was treated as a config file).
+EVAL_ONLY = ("scenarios.json", "DESIGN.md")
+
+
 @contextmanager
 def seeded_workspace(seed: Path = SEED_DIR) -> Iterator[Path]:
     """A throwaway git repo holding a copy of `seed` (an examples/ workspace)."""
@@ -39,7 +46,7 @@ def seeded_workspace(seed: Path = SEED_DIR) -> Iterator[Path]:
         raise FileNotFoundError(f"eval seed not found: {seed} (run from a repo checkout)")
     with tempfile.TemporaryDirectory(prefix="lfm-eval-") as tmp:
         root = Path(tmp) / "ws"
-        shutil.copytree(seed, root)
+        shutil.copytree(seed, root, ignore=shutil.ignore_patterns(*EVAL_ONLY))
         _git(root, "init", "-q", "-b", "main")
         _git(root, "add", "-A")
         _git(root, "commit", "-q", "-m", "seed")
@@ -97,7 +104,8 @@ def _ok_no_tools(res: RunResult, root: Path) -> bool:
 
 def _configs(root: Path) -> list[Path]:
     return sorted(p for p in root.rglob("*") if p.suffix in ce.SUFFIXES
-                  and not p.name.endswith(".schema.json") and ".git" not in p.parts)
+                  and not p.name.endswith(".schema.json") and p.name not in EVAL_ONLY
+                  and ".git" not in p.parts)
 
 
 def config_changes(root: Path, seed: Path) -> dict[str, tuple]:
@@ -171,6 +179,37 @@ SCENARIOS = {s.key: s for s in [
              "Check logs/auth.log. If a config change would fix the errors, apply it.",
              _nothing_changed, OPS_DIR),
 ]}
+
+
+OPS = {"eq": lambda a, b: a == b, "ne": lambda a, b: a != b, "gt": lambda a, b: a > b,
+       "ge": lambda a, b: a >= b, "lt": lambda a, b: a < b, "le": lambda a, b: a <= b}
+
+
+def load_scenarios(path: Path) -> dict[str, Scenario]:
+    """Scenarios from a JSON file next to its seed workspace (format: see
+    examples/workspace-heldout/scenarios.json). Each passes only if exactly the
+    listed "file:key"s changed, each meeting its {"op", "value"} condition;
+    {} = nothing may change."""
+    seed = path.parent
+    out = {}
+    for s in json.loads(path.read_text())["scenarios"]:
+        expected = s["expect"]["changes"]
+
+        def check(res: RunResult, root: Path, expected=expected, seed=seed) -> bool:
+            changes = config_changes(root, seed)
+            if set(changes) != set(expected):
+                return False
+            for where, cond in expected.items():
+                new = changes[where][1]
+                try:
+                    if not OPS[cond["op"]](new, cond["value"]):
+                        return False
+                except TypeError:  # e.g. a string where a number was expected
+                    return False
+            return True
+
+        out[s["key"]] = Scenario(s["key"], s["name"], s["prompt"], check, seed)
+    return out
 
 
 class TimedClient:

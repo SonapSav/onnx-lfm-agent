@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "backupd jobs",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["global", "jobs"],
+  "properties": {
+    "global": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["target", "bandwidth_limit_mbps", "max_concurrent_jobs", "notify_on_failure", "verify_after_upload"],
+      "properties": {
+        "target": {"type": "string", "pattern": "^s3://[a-z0-9.-]+(/.*)?$"},
+        "bandwidth_limit_mbps": {"type": "integer", "minimum": 0, "maximum": 10000},
+        "max_concurrent_jobs": {"type": "integer", "minimum": 1, "maximum": 8},
+        "notify_on_failure": {"type": "boolean"},
+        "verify_after_upload": {"type": "boolean"}
+      }
+    },
+    "jobs": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "schedule", "source", "compression", "retention_days", "timeout_min", "enabled"],
+        "properties": {
+          "name": {"type": "string", "pattern": "^[a-z0-9-]{1,40}$"},
+          "schedule": {"type": "string", "pattern": "^\\S+ \\S+ \\S+ \\S+ \\S+$"},
+          "source": {"type": "string", "minLength": 1, "maxLength": 1024},
+          "compression": {"type": "string", "enum": ["none", "gzip", "zstd"]},
+          "retention_days": {"type": "integer", "minimum": 1, "maximum": 3650},
+          "timeout_min": {"type": "integer", "minimum": 1, "maximum": 720},
+          "enabled": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

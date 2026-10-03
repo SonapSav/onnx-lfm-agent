@@ -1,0 +1,46 @@
+# mx-relay-01 — SMTP relay for corp.example
+# Accepts inbound mail from the internet and outbound mail from internal
+# senders (see relay/senders.json), and forwards outbound mail to the
+# provider's smarthost. Reloaded automatically on change (SIGHUP).
+
+server:
+  hostname: mx-relay-01.corp.example
+  listen_port: 25          # inbound from the internet
+  submission_port: 587     # internal senders
+  max_connections: 200
+  banner_delay_ms: 500     # slows down pre-greeting spam bots
+
+limits:
+  max_message_size_mb: 25  # applies to inbound and outbound
+  max_recipients: 100      # per message
+
+inbound:
+  rbl_enabled: true        # reject clients listed on zen.spamhaus.org
+  spf_policy: reject       # none | softfail | reject
+  greylisting: false
+
+# Provider smarthost for all outbound mail
+upstream:
+  host: smtp.mailprovider.example
+  port: 587
+  tls_mode: none           # none | starttls | implicit
+  connect_timeout_s: 30
+  auth:
+    username: relay@corp.example
+    password_file: /run/secrets/smarthost_pw
+
+queue:
+  max_age_hours: 120       # bounce undeliverable mail after this long
+  retry_interval_min: 15
+
+# DKIM signing for outbound domains
+domains:
+  - name: corp.example
+    dkim_selector: s2026
+    sign: true
+  - name: billing.corp.example
+    dkim_selector: s2026b
+    sign: true
+  - name: lists.corp.example
+    dkim_selector: s2025
+    sign: false            # list server signs itself

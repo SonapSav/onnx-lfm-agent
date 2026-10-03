@@ -1,0 +1,32 @@
+2026-10-02 08:02:14 INFO connect from mail-out.northwind.example[198.51.100.24]
+2026-10-02 08:02:15 INFO msg 7P9aA1 from=<orders@northwind.example> to=<purchasing@corp.example> size=48211 spf=pass status=accepted
+2026-10-02 08:17:40 INFO connect from unknown[203.0.113.77]
+2026-10-02 08:17:40 WARN reject RCPT from unknown[203.0.113.77]: 554 5.7.1 Service unavailable; client host [203.0.113.77] blocked using zen.spamhaus.org
+2026-10-02 08:35:02 INFO connect from mx2.partner-logistics.example[192.0.2.140]
+2026-10-02 08:35:03 WARN reject RCPT from mx2.partner-logistics.example[192.0.2.140]: 554 5.7.1 Service unavailable; client host [192.0.2.140] blocked using zen.spamhaus.org; https://www.spamhaus.org/query/ip/192.0.2.140
+2026-10-02 08:35:03 INFO note: 192.0.2.140 listed in SBL (SBL-ref 612044, listed 2026-10-01: "compromised host sending spam")
+2026-10-02 09:03:51 INFO connect from mail-out.northwind.example[198.51.100.24]
+2026-10-02 09:03:52 ERROR reject RCPT from mail-out.northwind.example[198.51.100.24]: 550 5.1.1 <purchasng@corp.example>: Recipient address rejected: User unknown in local recipient table
+2026-10-02 09:04:30 INFO msg 7P9cB4 from=<orders@northwind.example> to=<purchasing@corp.example> size=47990 spf=pass status=accepted
+2026-10-02 09:48:11 INFO connect from mx1.partner-logistics.example[192.0.2.139]
+2026-10-02 09:48:12 INFO msg 7P9dC2 from=<dispatch@partner-logistics.example> to=<warehouse@corp.example> size=211904 spf=pass status=accepted
+2026-10-02 10:12:09 INFO connect from unknown[203.0.113.201]
+2026-10-02 10:12:10 WARN reject MAIL from unknown[203.0.113.201]: 550 5.7.23 SPF check failed for <ceo@corp.example>: 203.0.113.201 is not permitted to send for corp.example
+2026-10-02 10:12:31 INFO connect from unknown[203.0.113.208]
+2026-10-02 10:12:31 WARN reject MAIL from unknown[203.0.113.208]: 550 5.7.23 SPF check failed for <ceo@corp.example>: 203.0.113.208 is not permitted to send for corp.example
+2026-10-02 10:40:55 INFO connect from mx2.partner-logistics.example[192.0.2.140]
+2026-10-02 10:40:55 WARN reject RCPT from mx2.partner-logistics.example[192.0.2.140]: 554 5.7.1 Service unavailable; client host [192.0.2.140] blocked using zen.spamhaus.org; https://www.spamhaus.org/query/ip/192.0.2.140
+2026-10-02 11:26:14 INFO connect from smtp.fabrikam.example[198.51.100.90]
+2026-10-02 11:26:44 WARN lost connection after DATA from smtp.fabrikam.example[198.51.100.90] (client timeout, 0 of 3145728 bytes received)
+2026-10-02 11:27:20 INFO connect from smtp.fabrikam.example[198.51.100.90]
+2026-10-02 11:27:23 INFO msg 7P9fD8 from=<ap@fabrikam.example> to=<billing@corp.example> size=3145728 spf=pass status=accepted
+2026-10-02 12:05:37 INFO connect from mail-out.northwind.example[198.51.100.24]
+2026-10-02 12:05:38 ERROR reject RCPT from mail-out.northwind.example[198.51.100.24]: 550 5.1.1 <k.okafor@corp.example>: Recipient address rejected: User unknown in local recipient table
+2026-10-02 12:05:38 INFO note: <k.okafor@corp.example> mailbox removed 2026-09-15 (directory sync)
+2026-10-02 13:44:02 INFO connect from mx2.partner-logistics.example[192.0.2.140]
+2026-10-02 13:44:02 WARN reject RCPT from mx2.partner-logistics.example[192.0.2.140]: 554 5.7.1 Service unavailable; client host [192.0.2.140] blocked using zen.spamhaus.org; https://www.spamhaus.org/query/ip/192.0.2.140
+2026-10-02 13:51:19 INFO connect from mx1.partner-logistics.example[192.0.2.139]
+2026-10-02 13:51:20 INFO msg 7P9hE3 from=<dispatch@partner-logistics.example> to=<warehouse@corp.example> size=198330 spf=pass status=accepted
+2026-10-02 15:09:47 INFO connect from unknown[203.0.113.12]
+2026-10-02 15:09:47 WARN reject RCPT from unknown[203.0.113.12]: 554 5.7.1 Service unavailable; client host [203.0.113.12] blocked using zen.spamhaus.org
+2026-10-02 16:30:00 INFO inbound stats: accepted=212 rejected=61 (rbl=38 spf=17 unknown_user=6)

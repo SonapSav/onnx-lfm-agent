@@ -1,0 +1,21 @@
+2026-10-03 10:58:12 INFO configuration change detected, reloading metrics/shipper.json
+2026-10-03 10:58:12 INFO configuration reloaded: 4 scrape targets, 8 shards, remote_write https://metrics-store.internal.example:9443/api/v1/write
+2026-10-03 10:58:13 WARN remote_write: TLS certificate verification is disabled for metrics-store.internal.example
+2026-10-03 10:58:27 ERROR scrape node 10.20.0.17:9100 failed: dial tcp 10.20.0.17:9100: connect: no route to host
+2026-10-03 10:58:31 ERROR remote_write shard 0: HTTP 413 Payload Too Large: "request contains 20000 samples, maximum allowed is 10000 samples per request"; batch dropped (non-retryable)
+2026-10-03 10:58:32 ERROR remote_write shard 3: HTTP 413 Payload Too Large: "request contains 20000 samples, maximum allowed is 10000 samples per request"; batch dropped (non-retryable)
+2026-10-03 10:58:42 ERROR scrape node 10.20.0.17:9100 failed: dial tcp 10.20.0.17:9100: connect: no route to host
+2026-10-03 10:58:46 ERROR remote_write shard 5: HTTP 413 Payload Too Large: "request contains 20000 samples, maximum allowed is 10000 samples per request"; batch dropped (non-retryable)
+2026-10-03 10:59:03 WARN scrape mxrelay 10.20.3.5:9154: dropped 3 series with label value longer than 2048 bytes (label "subject")
+2026-10-03 10:59:16 ERROR remote_write shard 1: HTTP 413 Payload Too Large: "request contains 20000 samples, maximum allowed is 10000 samples per request"; batch dropped (non-retryable)
+2026-10-03 11:00:00 INFO stats: scraped=48210 samples/min sent=0 dropped=60000 queue=31840/200000
+2026-10-03 11:04:51 WARN remote_write: request to metrics-store.internal.example took 12.4s (timeout 30s); store reports high ingest latency
+2026-10-03 11:05:00 INFO stats: scraped=48195 samples/min sent=0 dropped=240000 queue=29110/200000
+2026-10-03 11:07:13 ERROR remote_write shard 6: HTTP 413 Payload Too Large: "request contains 20000 samples, maximum allowed is 10000 samples per request"; batch dropped (non-retryable)
+2026-10-03 11:09:40 ERROR remote_write shard 2: HTTP 503 Service Unavailable: "ingester ring not ready"; retrying in 500ms
+2026-10-03 11:09:41 ERROR remote_write shard 2: HTTP 413 Payload Too Large: "request contains 20000 samples, maximum allowed is 10000 samples per request"; batch dropped (non-retryable)
+2026-10-03 11:10:00 INFO stats: scraped=48230 samples/min sent=0 dropped=240000 queue=30420/200000
+2026-10-03 11:10:00 WARN no samples delivered to remote_write since 10:58:12
+2026-10-03 11:14:22 ERROR scrape node 10.20.0.17:9100 failed: dial tcp 10.20.0.17:9100: connect: no route to host
+2026-10-03 11:15:00 INFO stats: scraped=48188 samples/min sent=0 dropped=240000 queue=28960/200000
+2026-10-03 11:15:00 WARN no samples delivered to remote_write since 10:58:12

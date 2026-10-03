@@ -32,7 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from onnx_lfm_agent.config import settings  # noqa: E402
-from onnx_lfm_agent.evals import SCENARIOS, run_scenario  # noqa: E402
+from onnx_lfm_agent.evals import SCENARIOS, load_scenarios, run_scenario  # noqa: E402
 from onnx_lfm_agent.prompts import BUILTIN  # noqa: E402
 
 
@@ -50,18 +50,23 @@ def main() -> None:
     ap.add_argument("--compare-prompt", action="store_true",
                     help="run each scenario with the system prompt off, then on")
     ap.add_argument("--json", type=Path, help="also write results here")
+    ap.add_argument("--scenario-file", type=Path,
+                    help="run the scenarios in this JSON file (seeded from its folder) instead")
     args = ap.parse_args()
 
+    scenarios = load_scenarios(args.scenario_file) if args.scenario_file else SCENARIOS
+    if args.scenario_file and args.scenarios == ",".join(SCENARIOS):
+        args.scenarios = ",".join(scenarios)
     keys = [k.strip().upper() for k in args.scenarios.split(",") if k.strip()]
-    if unknown := [k for k in keys if k not in SCENARIOS]:
-        sys.exit(f"unknown scenario(s) {unknown}; choose from {list(SCENARIOS)}")
+    if unknown := [k for k in keys if k not in scenarios]:
+        sys.exit(f"unknown scenario(s) {unknown}; choose from {list(scenarios)}")
     modes = [("off", ""), ("on", BUILTIN)] if args.compare_prompt else [(_mode(settings.system_prompt), None)]
 
     print(f"model API: {settings.url}  temperature: {settings.temperature}  runs: {args.runs}", flush=True)
     rows = []
     for mode, system_prompt in modes:
         for key in keys:
-            sc = SCENARIOS[key]
+            sc = scenarios[key]
             outcomes = [run_scenario(sc, system_prompt) for _ in range(args.runs)]
             calls = [t for o in outcomes for t in o.client.call_s]
             toks = [t for o in outcomes for t in o.client.out_tokens]

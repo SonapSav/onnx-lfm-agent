@@ -1,0 +1,29 @@
+{
+  "default_max_msgs_per_hour": 100,
+  "clients": [
+    {
+      "name": "web-frontend",
+      "cidr": "10.20.1.0/24",
+      "auth_required": false,
+      "max_msgs_per_hour": 2000
+    },
+    {
+      "name": "monitoring",
+      "cidr": "10.20.9.4/32",
+      "auth_required": false,
+      "max_msgs_per_hour": 200
+    },
+    {
+      "name": "billing-app",
+      "cidr": "10.20.4.15/32",
+      "auth_required": true,
+      "max_msgs_per_hour": 500
+    },
+    {
+      "name": "crm-sync",
+      "cidr": "10.20.4.22/32",
+      "auth_required": true,
+      "max_msgs_per_hour": 800
+    }
+  ]
+}

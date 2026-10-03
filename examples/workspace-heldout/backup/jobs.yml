@@ -1,0 +1,43 @@
+# Nightly backup runner (backupd) on backup-01
+# Jobs run one at a time in schedule order; a job that exceeds its
+# timeout_min is killed and its partial archive discarded.
+
+global:
+  target: s3://corp-backups-eu/backup-01
+  bandwidth_limit_mbps: 2500   # upload cap, megabits/s (0 = unlimited)
+  max_concurrent_jobs: 1
+  notify_on_failure: true
+  verify_after_upload: true
+
+jobs:
+  - name: etc-configs
+    schedule: "0 1 * * *"
+    source: /etc
+    compression: zstd          # none | gzip | zstd
+    retention_days: 90
+    timeout_min: 15
+    enabled: true
+
+  - name: postgres-main
+    schedule: "30 1 * * *"
+    source: pgdump://db-01.corp.example/main
+    compression: zstd
+    retention_days: 14
+    timeout_min: 90
+    enabled: true
+
+  - name: media-assets
+    schedule: "0 4 * * *"
+    source: /srv/media
+    compression: none          # already-compressed images/video
+    retention_days: 30
+    timeout_min: 180
+    enabled: true
+
+  - name: mailrelay-queue
+    schedule: "30 5 * * *"
+    source: /var/spool/mxrelay
+    compression: gzip
+    retention_days: 7
+    timeout_min: 20
+    enabled: false             # disabled after queue moved to tmpfs

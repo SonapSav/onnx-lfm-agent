@@ -166,6 +166,8 @@ def settings_index(ws: Workspace, files: list[str]) -> dict[str, Setting]:
         for key, value in leaves(data).items():
             if value is not None and not isinstance(value, (str, int, float, bool)):
                 continue
+            if ce.lookup(data, key) is ce.MISSING:
+                continue  # a key containing "." (app.kubernetes.io/name) can't be a dotted path
             sub = _subschema(schema, key)
             notes = "; ".join(filter(None, (_describe(sub), _comment(data, key))))
             named = _named_path(data, key)

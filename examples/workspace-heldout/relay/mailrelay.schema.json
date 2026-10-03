@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "mx-relay configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["server", "limits", "inbound", "upstream", "queue", "domains"],
+  "properties": {
+    "server": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hostname", "listen_port", "submission_port", "max_connections", "banner_delay_ms"],
+      "properties": {
+        "hostname": {"type": "string", "minLength": 1, "maxLength": 253},
+        "listen_port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "submission_port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "max_connections": {"type": "integer", "minimum": 1, "maximum": 5000},
+        "banner_delay_ms": {"type": "integer", "minimum": 0, "maximum": 10000}
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_message_size_mb", "max_recipients"],
+      "properties": {
+        "max_message_size_mb": {"type": "integer", "minimum": 1, "maximum": 50},
+        "max_recipients": {"type": "integer", "minimum": 1, "maximum": 1000}
+      }
+    },
+    "inbound": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rbl_enabled", "spf_policy", "greylisting"],
+      "properties": {
+        "rbl_enabled": {"type": "boolean"},
+        "spf_policy": {"type": "string", "enum": ["none", "softfail", "reject"]},
+        "greylisting": {"type": "boolean"}
+      }
+    },
+    "upstream": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["host", "port", "tls_mode", "connect_timeout_s", "auth"],
+      "properties": {
+        "host": {"type": "string", "minLength": 1, "maxLength": 253},
+        "port": {"type": "integer", "minimum": 1, "maximum": 65535},
+        "tls_mode": {"type": "string", "enum": ["none", "starttls", "implicit"]},
+        "connect_timeout_s": {"type": "integer", "minimum": 1, "maximum": 300},
+        "auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["username", "password_file"],
+          "properties": {
+            "username": {"type": "string", "minLength": 1, "maxLength": 254},
+            "password_file": {"type": "string", "minLength": 1, "maxLength": 4096}
+          }
+        }
+      }
+    },
+    "queue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_age_hours", "retry_interval_min"],
+      "properties": {
+        "max_age_hours": {"type": "integer", "minimum": 1, "maximum": 168},
+        "retry_interval_min": {"type": "integer", "minimum": 1, "maximum": 240}
+      }
+    },
+    "domains": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 50,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "dkim_selector", "sign"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1, "maxLength": 253},
+          "dkim_selector": {"type": "string", "pattern": "^[a-z0-9-]{1,63}$"},
+          "sign": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

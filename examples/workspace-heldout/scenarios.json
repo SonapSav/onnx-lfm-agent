@@ -1,0 +1,52 @@
+{
+  "scenarios": [
+    {
+      "key": "I1",
+      "name": "directed: exact key and value",
+      "prompt": "In relay/mailrelay.yaml set queue.max_age_hours to 72, then apply it.",
+      "expect": {"changes": {"relay/mailrelay.yaml:queue.max_age_hours": {"op": "eq", "value": 72}}}
+    },
+    {
+      "key": "I2",
+      "name": "directed in plain words, no key name",
+      "prompt": "Our internal CA is rolled out everywhere now, so the metrics shipper should stop skipping certificate checks when it talks to the metrics store. Please make that change and apply it.",
+      "expect": {"changes": {"metrics/shipper.json:remote_write.tls.insecure_skip_verify": {"op": "eq", "value": false}}}
+    },
+    {
+      "key": "I3",
+      "name": "list item identified by name",
+      "prompt": "Finance is sending month-end invoices tonight. Bump the hourly message limit for the billing-app sender on the mail relay to 1200 and apply it.",
+      "expect": {"changes": {"relay/senders.json:clients.2.max_msgs_per_hour": {"op": "eq", "value": 1200}}}
+    },
+    {
+      "key": "I4",
+      "name": "open-ended: check the backup log and fix",
+      "prompt": "The database backup has failed the last two nights. Have a look at logs/backupd.log, fix whatever config is causing it and apply the fix.",
+      "expect": {"changes": {"backup/jobs.yml:jobs.1.timeout_min": {"op": "gt", "value": 132}}}
+    },
+    {
+      "key": "I5",
+      "name": "symptom only, no file named",
+      "prompt": "Nobody's outgoing email has gone out since early this morning, it all just sits there. Can you find out why and apply a fix?",
+      "expect": {"changes": {"relay/mailrelay.yaml:upstream.tls_mode": {"op": "eq", "value": "starttls"}}}
+    },
+    {
+      "key": "I6",
+      "name": "log errors not fixable by config",
+      "prompt": "A couple of partners say mail they sent us yesterday got rejected. Check the inbound relay log and, if it's our config, fix it and apply.",
+      "expect": {"changes": {}}
+    },
+    {
+      "key": "I7",
+      "name": "value inferred from numbers in the log",
+      "prompt": "Metrics stopped showing up in the dashboards about 11 this morning. The shipper's log should say why - pick a value that will actually work and apply it.",
+      "expect": {"changes": {"metrics/shipper.json:batch.max_samples": {"op": "le", "value": 10000}}}
+    },
+    {
+      "key": "I8",
+      "name": "propose only, do not apply",
+      "prompt": "Could you draft a change raising the relay's max message size to 35 MB? Don't apply anything, I want to look at the diff first.",
+      "expect": {"changes": {}}
+    }
+  ]
+}

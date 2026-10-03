@@ -1,0 +1,51 @@
+2026-10-03 00:00:02 INFO queue stats: active=0 deferred=2 hold=0
+2026-10-03 00:14:37 INFO msg 7Q2kX1 from=<noreply@corp.example> client=web-frontend size=18233 rcpts=1
+2026-10-03 00:14:38 INFO upstream smtp.mailprovider.example:587 connected; TLS established (STARTTLS, TLSv1.3, TLS_AES_256_GCM_SHA384)
+2026-10-03 00:14:38 INFO msg 7Q2kX1 to=<a.moreau@example.org> relay=smtp.mailprovider.example:587 status=sent (250 2.0.0 Ok: queued as 4Wd9kL)
+2026-10-03 00:51:12 INFO msg 7Q2mA4 from=<invoices@billing.corp.example> client=billing-app size=104882 rcpts=1
+2026-10-03 00:51:13 INFO upstream smtp.mailprovider.example:587 connected; TLS established (STARTTLS, TLSv1.3, TLS_AES_256_GCM_SHA384)
+2026-10-03 00:51:13 INFO msg 7Q2mA4 to=<accounts@northwind.example> relay=smtp.mailprovider.example:587 status=sent (250 2.0.0 Ok: queued as 4Wd9pR)
+2026-10-03 01:22:40 INFO msg 7Q2nC9 from=<alerts@corp.example> client=monitoring size=3311 rcpts=2
+2026-10-03 01:22:41 INFO upstream smtp.mailprovider.example:587 connected; TLS established (STARTTLS, TLSv1.3, TLS_AES_256_GCM_SHA384)
+2026-10-03 01:22:41 INFO msg 7Q2nC9 to=<oncall@corp.example> relay=smtp.mailprovider.example:587 status=sent (250 2.0.0 Ok: queued as 4Wd9sT)
+2026-10-03 01:22:41 INFO msg 7Q2nC9 to=<ops-pager@pagerhub.example> relay=smtp.mailprovider.example:587 status=sent (250 2.0.0 Ok: queued as 4Wd9sT)
+2026-10-03 02:05:19 INFO msg 7Q2pF0 from=<noreply@corp.example> client=web-frontend size=17920 rcpts=1
+2026-10-03 02:05:20 INFO upstream smtp.mailprovider.example:587 connected; TLS established (STARTTLS, TLSv1.3, TLS_AES_256_GCM_SHA384)
+2026-10-03 02:05:21 ERROR msg 7Q2pF0 to=<j.harrison@gmial.invalid> relay=smtp.mailprovider.example:587 status=bounced (550 5.1.2 <j.harrison@gmial.invalid>: Recipient address rejected: Domain not found)
+2026-10-03 02:05:21 INFO msg 7Q2pF0 bounce notification sent to <noreply@corp.example>
+2026-10-03 03:14:02 INFO msg 7Q2rH3 from=<noreply@corp.example> client=web-frontend size=19004 rcpts=1
+2026-10-03 03:14:02 WARN upstream lookup smtp.mailprovider.example failed: Temporary failure in name resolution; will retry
+2026-10-03 03:14:02 WARN msg 7Q2rH3 status=deferred (upstream DNS lookup failed)
+2026-10-03 03:29:03 INFO upstream smtp.mailprovider.example:587 connected; TLS established (STARTTLS, TLSv1.3, TLS_AES_256_GCM_SHA384)
+2026-10-03 03:29:03 INFO msg 7Q2rH3 to=<lena.fischer@example.net> relay=smtp.mailprovider.example:587 status=sent (250 2.0.0 Ok: queued as 4WdA1c)
+2026-10-03 04:40:55 INFO msg 7Q2tK8 from=<sync@corp.example> client=crm-sync size=6120 rcpts=1
+2026-10-03 04:40:56 INFO upstream smtp.mailprovider.example:587 connected; TLS established (STARTTLS, TLSv1.3, TLS_AES_256_GCM_SHA384)
+2026-10-03 04:40:57 WARN msg 7Q2tK8 to=<d.osei@contoso.example> relay=smtp.mailprovider.example:587 status=deferred (452 4.2.2 <d.osei@contoso.example>: Mailbox full)
+2026-10-03 05:58:30 INFO configuration change detected, reloading relay/mailrelay.yaml
+2026-10-03 06:02:11 INFO configuration reloaded (relay/mailrelay.yaml rev 41, 3 domains, 4 sender clients)
+2026-10-03 06:10:44 INFO msg 7Q2vN2 from=<noreply@corp.example> client=web-frontend size=18450 rcpts=1
+2026-10-03 06:10:45 INFO upstream smtp.mailprovider.example:587 connected; plaintext session
+2026-10-03 06:10:45 WARN upstream smtp.mailprovider.example did not advertise AUTH; continuing without authentication
+2026-10-03 06:10:45 WARN msg 7Q2vN2 to=<m.silva@example.com> relay=smtp.mailprovider.example:587 status=deferred (530 5.7.0 Must issue a STARTTLS command first)
+2026-10-03 06:23:09 INFO msg 7Q2vQ7 from=<invoices@billing.corp.example> client=billing-app size=98812 rcpts=1
+2026-10-03 06:23:10 INFO upstream smtp.mailprovider.example:587 connected; plaintext session
+2026-10-03 06:23:10 WARN upstream smtp.mailprovider.example did not advertise AUTH; continuing without authentication
+2026-10-03 06:23:10 WARN msg 7Q2vQ7 to=<ap@fabrikam.example> relay=smtp.mailprovider.example:587 status=deferred (530 5.7.0 Must issue a STARTTLS command first)
+2026-10-03 06:25:46 INFO upstream smtp.mailprovider.example:587 connected; plaintext session
+2026-10-03 06:25:46 WARN msg 7Q2vN2 to=<m.silva@example.com> relay=smtp.mailprovider.example:587 status=deferred (530 5.7.0 Must issue a STARTTLS command first)
+2026-10-03 06:41:58 INFO msg 7Q2wB1 from=<alerts@corp.example> client=monitoring size=3402 rcpts=2
+2026-10-03 06:41:59 INFO upstream smtp.mailprovider.example:587 connected; plaintext session
+2026-10-03 06:41:59 WARN msg 7Q2wB1 to=<oncall@corp.example> relay=smtp.mailprovider.example:587 status=deferred (530 5.7.0 Must issue a STARTTLS command first)
+2026-10-03 06:41:59 WARN msg 7Q2wB1 to=<ops-pager@pagerhub.example> relay=smtp.mailprovider.example:587 status=deferred (530 5.7.0 Must issue a STARTTLS command first)
+2026-10-03 07:00:01 INFO queue stats: active=0 deferred=9 hold=0
+2026-10-03 07:12:33 INFO upstream smtp.mailprovider.example:587 connected; plaintext session
+2026-10-03 07:12:33 WARN msg 7Q2tK8 to=<d.osei@contoso.example> relay=smtp.mailprovider.example:587 status=deferred (530 5.7.0 Must issue a STARTTLS command first)
+2026-10-03 07:30:12 INFO msg 7Q2xD5 from=<noreply@corp.example> client=web-frontend size=17702 rcpts=1
+2026-10-03 07:30:13 INFO upstream smtp.mailprovider.example:587 connected; plaintext session
+2026-10-03 07:30:13 WARN msg 7Q2xD5 to=<p.nakamura@example.jp> relay=smtp.mailprovider.example:587 status=deferred (530 5.7.0 Must issue a STARTTLS command first)
+2026-10-03 08:00:01 INFO queue stats: active=0 deferred=27 hold=0
+2026-10-03 08:00:01 WARN deferred queue growing: 27 messages, oldest 3h17m, 0 delivered since 06:02
+2026-10-03 08:44:20 INFO upstream smtp.mailprovider.example:587 connected; plaintext session
+2026-10-03 08:44:20 WARN msg 7Q2vQ7 to=<ap@fabrikam.example> relay=smtp.mailprovider.example:587 status=deferred (530 5.7.0 Must issue a STARTTLS command first)
+2026-10-03 09:00:01 INFO queue stats: active=0 deferred=46 hold=0
+2026-10-03 09:00:01 WARN deferred queue growing: 46 messages, oldest 4h19m, 0 delivered since 06:02
