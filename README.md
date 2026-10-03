@@ -82,6 +82,14 @@ lfm-agent "The logs show upstream timeouts at 5s. Propose changing server.reques
 ```
 Create it before `docker compose up` (otherwise Docker creates it root-owned).
 
+## System prompt
+A short built-in system prompt (two lines, `prompts.py`) is sent on every model
+call; it is not stored in conversation history. Override with
+`LFM_SYSTEM_PROMPT="..."`, or disable with `LFM_SYSTEM_PROMPT=`. Measured
+trade-off with the 1.2B model: with it, the agent answers general questions
+(without, it refuses them), but it may try to apply a change you only asked it
+to propose — you'll see the diff at the approval prompt and can decline.
+
 ## Tool policy
 Each tool is `allow` (runs), `ask` (runs only if approved) or `deny` (never
 runs). Defaults: read-only tools `allow`, `dangerous=True` tools `ask`. The CLI
@@ -92,6 +100,7 @@ Override per tool with `LFM_TOOL_POLICY="name=allow,other=deny"`.
 - `config.py` — `LFM_*` settings (URL, api key, model, max rounds).
 - `client.py` — OpenAI client pointed at the API.
 - `tools.py` — `Tool` + `Registry` (schemas, dispatch, arg validation, allow/ask/deny policy).
+- `prompts.py` — the system prompt (base + toolset guidance).
 - `toolsets.py` — builds the registry from `LFM_TOOLSETS`.
 - `workspace.py` — the sandbox (path resolution) + git helper.
 - `workspace_tools.py` — file tools, propose/apply, operator rollback.

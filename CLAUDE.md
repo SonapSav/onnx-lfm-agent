@@ -45,6 +45,10 @@ lifecycle, deps, and trust boundary (this one *executes tools*; the API only
 - `server.py` — `lfm-agent-server` (FastAPI/uvicorn, 1 worker, `create_app()` factory). `GET /health` (no auth; lists tool
   policies), `POST /run {prompt, history?}` → `{answer, steps, history}`; model-API errors → 502. Auth = `LFM_AGENT_API_KEY`
   via `X-API-Key` or `Bearer` (constant-time, same scheme as the API); **refuses to start without it**. No approver → `ask` tools denied.
+- `prompts.py` — system prompt = 2-line `BASE` + `Registry.guidance` lines from toolsets (workspace contributes
+  **none**, on purpose — see gotchas). `Agent` sends it as the leading system message on **every** call but never
+  stores it in returned history (a leading system message in incoming history is dropped). `LFM_SYSTEM_PROMPT`:
+  unset → built-in, text → replaces, `""` → off. Costs +34 prompt tokens (~0.2 s/call). Default **on** (decided).
 - `toolsets.py` — `build_registry(LFM_TOOLSETS)`: `workspace` (default) and/or `demo` (`example_tools.py`: time, add).
 - `workspace.py` — `Workspace.resolve()` sandbox (relative to `LFM_WORKSPACE`; `..`/absolute/symlink escapes and `.git`
   refused) + `git()` helper (author `onnx-lfm-agent`) + a lock for git-mutating ops.
@@ -62,7 +66,7 @@ lifecycle, deps, and trust boundary (this one *executes tools*; the API only
   (temp git repo seeded from `examples/workspace`). Tests pass `tool_policy=""`
   so a local `LFM_TOOL_POLICY` can't leak in.
 
-Verified: 91 unit tests pass; live: CLI (venv + compose container) and the HTTP service against the running API,
+Verified: 97 unit tests pass; live: CLI (venv + compose container) and the HTTP service against the running API,
 including propose → approve → commit → operator rollback on the demo workspace.
 
 ## Roadmap — what to build next (rough priority)
@@ -74,14 +78,20 @@ including propose → approve → commit → operator rollback on the demo works
    server-side proposals over HTTP; risk/confidence-based approval.
 3. **Real tools** — first batch DONE (workspace files + config propose/apply). Next candidates: HTTP GET (host allowlist),
    DB read-only query. Keep the set small (now 5 tools) — this is a 1.2B model.
-   **Known limit:** open-ended "read the logs and fix the config" fails (0/6 live): the model guesses key names
-   (`server.timeout`) instead of reading `app.yaml`, and doesn't use the key list in the error. Directed requests
-   ("change server.request_timeout_s to 15, then apply") succeed 6/6. Likely fixes: a system prompt that says
-   "read the config before proposing" (item 6), or offering fewer tools per step.
+   **Known limit:** open-ended "read the logs and fix the config" fails 0/6 under *every* variant tried (no prompt,
+   prompt with workspace rules, base prompt, read-before-propose guard): Instruct guesses key names and never uses
+   the file it reads. Directed requests ("change server.request_timeout_s to 15, then apply") succeed 6/6.
+   **Next step for it: a harness-driven workflow** (code sequences search logs → read config → propose; the model
+   only fills one decision per step), not more prompting. See "Live evals" below.
 4. **Streaming** of assistant text + tool-call deltas (API already streams; surface it).
 5. **Tracing/logging** of each step (prompt, tool calls, results) for debugging and evals.
-6. **State/memory** across turns beyond the raw message list; maybe a system prompt / persona.
+6. **System prompt** — DONE (base prompt, default on). Still open: state/memory beyond the raw message list
+   (e.g. trimming long histories — every token is re-prefilled each round).
 7. **Tests**: an integration test behind a marker that needs a running API (mirror the API repo's `-m integration` pattern).
+8. **GPU / Jetson** (target decided: **deploy on Jetson Orin class, develop on an x86 PC with a CUDA GPU**; this
+   laptop has no NVIDIA GPU). Agent side needs nothing: point `LFM_URL` at the GPU box's API. API side: verify the
+   existing `Dockerfile.gpu` path, keep per-token state on the GPU (ORT IO binding), add an aarch64/JetPack image for
+   Orin. Re-run the live evals there; re-evaluate the Thinking model on GPU (see below).
 
 ## Design notes / gotchas
 - The model (LFM2.5-1.2B) can be **over-eager** — may call an unnecessary tool (seen: calling `get_current_time` before a weather lookup). Harness should tolerate/ignore irrelevant results; consider narrowing offered tools per step.
@@ -108,6 +118,26 @@ including propose → approve → commit → operator rollback on the demo works
   **A second API instance does not help** (measured, batch of 6 agent calls: 1×6 threads 38.6 s; 2×3 threads
   concurrent 37.9 s, within noise; 2×6 threads 55.7 s). Inference is memory-bandwidth bound, so instances just
   split it. To speed up live testing: shorter prompts/fewer tools, prompt-prefix caching in the API, fewer runs.
+- **Live evals: system prompt & guard** (LFM2.5-1.2B-Instruct q4, 6 runs each; A = "propose X, then apply",
+  B = "propose X" (must not apply), C = open-ended "check logs and fix", D = "capital of France?" (no tools)):
+
+  | variant | A | B | C | D |
+  |---|---|---|---|---|
+  | no system prompt | 6 | **6** | 0 | **0** (refuses: "functions are focused on file management") |
+  | base prompt (shipped) | 6 | 0 | 0 | **6** |
+  | + workspace rules ("read the file first", "only apply if asked") | 6 | 0 | 0* | 5 |
+  | + read-before-propose guard (removed) | 6 | 0–1 | 0 | 0 / 6 |
+
+  \*first run scored 6/6 only because the example key in the prompt *was* the answer — never use a real key as an
+  example. **Any** system prompt makes Instruct apply when only asked to propose (safe: CLI asks, server denies) —
+  accepted in exchange for D. The guard derailed the model (extra round → `read_file(".")`, applying proposals that
+  don't exist). Lesson: this model follows tool **errors** and narrow tool design, not instructions.
+- **LFM2.5-1.2B-Thinking evaluated, not adopted (for now).** ONNX build `LiquidAI/LFM2.5-1.2B-Thinking-ONNX`, same
+  template/tool format. On this CPU: ~1000–1350 reasoning tokens per round → 68–87 s/call (Instruct ~8 s); at 1024
+  max_tokens every call was cut off mid-thought. Quality was better (right key, included `path`, did *not* apply
+  in B), still quoted `"15"` and invented a `proposal_id`. `<think>`/`</think>` are **not** special tokens
+  (text survives decoding; the API doesn't split it out yet). Revisit on GPU. Its files live in the API repo's
+  `models/lfm2.5-1.2b-thinking/` (separate dir — same filenames as Instruct, would overwrite).
 - **Temperature** defaults to **0.1** (= the API's Liquid-recommended default; the
   agent always sends it, so it overrides the server's value). Over `/v1` only
   temperature is client-settable — `top_k=50` / `repetition_penalty=1.05` are

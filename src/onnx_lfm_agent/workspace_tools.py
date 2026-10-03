@@ -118,8 +118,19 @@ def _infer_path(ws: Workspace, path: str, key: str) -> tuple[str, str, str | Non
                          f"candidates: {', '.join(configs) or 'none found'}")
 
 
+# No system-prompt guidance from this toolset, on purpose. Live evals
+# (LFM2.5-1.2B, 6 runs each): workspace instructions never got the model to
+# read the config before proposing (open-ended 0/6), and made it apply changes
+# it was only asked to propose (0/6, from 6/6 without). A real key as the
+# example got copied verbatim. A read-before-propose guard was tried too and
+# removed: the extra round derailed it (directed propose 6/6 -> 0-1/6) with no
+# open-ended gain. See CLAUDE.md.
+GUIDANCE: list[str] = []
+
+
 def register(r: Registry, ws: Workspace, store: ProposalStore | None = None) -> ProposalStore:
     store = store or ProposalStore()
+    r.guidance.extend(GUIDANCE)
 
     def _preview(args: dict) -> str:
         prop = store.peek(args.get("proposal_id", ""))

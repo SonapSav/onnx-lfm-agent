@@ -61,6 +61,8 @@ class Registry:
 
     def __init__(self) -> None:
         self._tools: dict[str, Tool] = {}
+        # System-prompt lines contributed by toolsets (see prompts.py).
+        self.guidance: list[str] = []
 
     def tool(self, *, description: str, parameters: dict, dangerous: bool = False,
              policy: str | None = None, preview: Callable[[dict], str] | None = None,

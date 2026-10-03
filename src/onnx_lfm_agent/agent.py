@@ -7,6 +7,7 @@ from typing import Any, Callable
 
 from .client import make_client
 from .config import settings
+from .prompts import build_system_prompt
 from .tools import Registry, Tool, parse_policy_spec
 
 log = logging.getLogger(__name__)
@@ -47,7 +48,8 @@ class Agent:
 
     def __init__(self, registry: Registry, client=None, model: str | None = None,
                  max_rounds: int | None = None, temperature: float | None = None,
-                 approve: ApproveFn | None = None, tool_policy: str | None = None) -> None:
+                 approve: ApproveFn | None = None, tool_policy: str | None = None,
+                 system_prompt: str | None = None) -> None:
         self.registry = registry
         self.client = client or make_client()
         self.model = model or settings.model
@@ -56,6 +58,12 @@ class Agent:
         self.approve = approve
         self.policies = self._resolve_policies(
             settings.tool_policy if tool_policy is None else tool_policy)
+        # None -> LFM_SYSTEM_PROMPT -> built-in; "" disables it.
+        if system_prompt is None:
+            system_prompt = settings.system_prompt
+        if system_prompt is None:
+            system_prompt = build_system_prompt(registry)
+        self.system_prompt = system_prompt
 
     def _resolve_policies(self, spec: str) -> dict[str, str]:
         """Tool defaults, overlaid with the LFM_TOOL_POLICY-style `spec`."""
@@ -74,13 +82,19 @@ class Agent:
 
     def run(self, user_text: str, history: list | None = None) -> RunResult:
         messages = list(history or [])
+        # The system prompt is sent on every call but never kept in history:
+        # callers can't duplicate it, and prompt changes apply to old
+        # conversations. The template only honours a *leading* system message.
+        if messages and messages[0].get("role") == "system":
+            messages = messages[1:]
         messages.append({"role": "user", "content": user_text})
+        system = [{"role": "system", "content": self.system_prompt}] if self.system_prompt else []
         steps: list[Step] = []
 
         for _ in range(self.max_rounds):
             resp = self.client.chat.completions.create(
                 model=self.model,
-                messages=messages,
+                messages=system + messages,
                 tools=self.registry.schemas() or None,
                 temperature=self.temperature,
             )
