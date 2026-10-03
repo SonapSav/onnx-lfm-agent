@@ -105,6 +105,9 @@ including propose → approve → commit → operator rollback on the demo works
   (6c/12t Ryzen; ORT's default of all 12 threads was ~1.7x slower per tool-calling round at double the
   CPU) — see the API repo's README "Performance tuning" / commit `9b493f7`. One agent round ≈ 6.5 s;
   most of it is prompt processing (tool schemas + history), so fewer/shorter tool descriptions = faster.
+  **A second API instance does not help** (measured, batch of 6 agent calls: 1×6 threads 38.6 s; 2×3 threads
+  concurrent 37.9 s, within noise; 2×6 threads 55.7 s). Inference is memory-bandwidth bound, so instances just
+  split it. To speed up live testing: shorter prompts/fewer tools, prompt-prefix caching in the API, fewer runs.
 - **Temperature** defaults to **0.1** (= the API's Liquid-recommended default; the
   agent always sends it, so it overrides the server's value). Over `/v1` only
   temperature is client-settable — `top_k=50` / `repetition_penalty=1.05` are
