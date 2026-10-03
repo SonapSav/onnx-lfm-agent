@@ -27,8 +27,16 @@ def test_prompt_is_base_plus_toolset_guidance():
     assert build_system_prompt(r) == base + "\n- Extra rule."
 
 
+def test_off_by_default():
+    agent, client = agent_with([reply("ok")])
+    agent.run("hi")
+    assert agent.system_prompt == ""
+    assert client.sent[0]["messages"] == [{"role": "user", "content": "hi"}]
+
+
 def test_sent_first_on_every_call_but_not_in_history():
-    agent, client = agent_with([reply(None, tool_call('{"a": 1, "b": 2}')), reply("3")])
+    agent, client = agent_with([reply(None, tool_call('{"a": 1, "b": 2}')), reply("3")],
+                               system_prompt="builtin")
     result = agent.run("1+2?")
     assert len(client.sent) == 2
     for call in client.sent:
@@ -38,7 +46,7 @@ def test_sent_first_on_every_call_but_not_in_history():
 
 
 def test_leading_system_message_in_history_is_replaced():
-    agent, client = agent_with([reply("ok")])
+    agent, client = agent_with([reply("ok")], system_prompt="builtin")
     agent.run("hi", history=[{"role": "system", "content": "old prompt"},
                              {"role": "user", "content": "earlier"},
                              {"role": "assistant", "content": "sure"}])
@@ -56,7 +64,10 @@ def test_explicit_override_and_disable():
     assert client.sent[0]["messages"] == [{"role": "user", "content": "hi"}]
 
 
-@pytest.mark.parametrize("env_value, expected", [("Custom.", "Custom."), ("", None)])
+@pytest.mark.parametrize("env_value, expected", [
+    ("Custom.", "Custom."), ("", None),
+    ("builtin", "\n".join(f"- {line}" for line in BASE)),
+])
 def test_env_setting(monkeypatch, env_value, expected):
     monkeypatch.setattr(settings, "system_prompt", env_value)
     agent, client = agent_with([reply("ok")])

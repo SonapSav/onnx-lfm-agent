@@ -17,7 +17,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import config_edit as ce
-from .tools import Registry
+from . import log_fix
+from .client import make_client
+from .config import settings
+from .tools import CURRENT_RUN, Registry
 from .workspace import Workspace, WorkspaceError
 
 MAX_LIST = 200
@@ -39,6 +42,7 @@ class Proposal:
     summary: str  # becomes the commit subject
     diff: str
     reason: str
+    run: str | None = None  # the Agent.run() that proposed it (tools.CURRENT_RUN)
 
 
 class ProposalStore:
@@ -57,6 +61,11 @@ class ProposalStore:
             while len(self._items) > self._cap:
                 self._items.popitem(last=False)
             return p
+
+    def pending(self, run: str, path: Path) -> list[Proposal]:
+        """Unapplied proposals for `path` made earlier in agent run `run`."""
+        with self._lock:
+            return [p for p in self._items.values() if p.run == run and p.path == path]
 
     def peek(self, proposal_id: str) -> Proposal | None:
         with self._lock:
@@ -100,6 +109,13 @@ def _config_files(ws: Workspace) -> list[str]:
             and not p.name.endswith(".schema.json")]
 
 
+def _only(files: list[str], kind: str) -> str:
+    """Narrow repair for an omitted path: the only candidate, else refuse with the list."""
+    if len(files) == 1:
+        return files[0]
+    raise WorkspaceError(f"which {kind}? candidates: {', '.join(files) or 'none found'}")
+
+
 def _infer_path(ws: Workspace, path: str, key: str) -> tuple[str, str, str | None]:
     """Narrow repair: the 1.2B model often omits `path` or folds the file name
     into the key ("app.yaml.logging.level"). Returns (path, key, note)."""
@@ -128,7 +144,10 @@ def _infer_path(ws: Workspace, path: str, key: str) -> tuple[str, str, str | Non
 GUIDANCE: list[str] = []
 
 
-def register(r: Registry, ws: Workspace, store: ProposalStore | None = None) -> ProposalStore:
+def register(r: Registry, ws: Workspace, store: ProposalStore | None = None,
+             client=None) -> ProposalStore:
+    """`client` makes propose_fix_from_logs' own model calls (default: a client
+    for LFM_URL, created on first use)."""
     store = store or ProposalStore()
     r.guidance.extend(GUIDANCE)
 
@@ -268,9 +287,37 @@ def register(r: Registry, ws: Workspace, store: ProposalStore | None = None) -> 
             return result
         summary = f"agent: {'delete' if delete else 'set'} {key} in {rel}"
         prop = store.add(path=p, base_sha256=_sha256(p), new_text=new, summary=summary,
-                         diff=diff, reason=reason)
+                         diff=diff, reason=reason, run=CURRENT_RUN.get())
         result["proposal_id"] = prop.id
         return result
+
+    @r.tool(
+        description=("Find the errors in a log file and propose ONE config change that fixes "
+                     "them. Changes nothing: returns a diff and a proposal_id to pass to "
+                     "apply_config_change."),
+        parameters={"type": "object", "properties": {
+            "log_path": {"type": "string", "description": "Log file, e.g. logs/app.log"},
+            "config_path": {"type": "string", "description": "Config file to change"},
+        }},  # both inferred when omitted: the only .log / config file
+    )
+    def propose_fix_from_logs(log_path: str = "", config_path: str = "") -> dict:
+        nonlocal client
+        log_path = log_path or _only([ws.rel(p) for p, is_dir in _walk(ws, ws.root)
+                                      if not is_dir and p.suffix.lower() == ".log"], "log file")
+        config_path = config_path or _only(_config_files(ws), "config file")
+        # Live runs: asked "set X to 15, then apply", the model sometimes also
+        # called this tool (the request mentions logs), got a second proposal
+        # (10) and applied that one. A tool error is what it follows.
+        run = CURRENT_RUN.get()
+        if run and (prior := store.pending(run, ws.resolve(config_path))):
+            p = prior[-1]
+            raise WorkspaceError(
+                f"{p.id} is already proposed in this conversation ({p.summary.removeprefix('agent: ')}"
+                f"). Do not propose again: if the user asked to apply it, call apply_config_change "
+                f"with proposal_id {p.id}; otherwise report it.")
+        client = client or make_client()
+        return log_fix.run(ws, client, settings.model, settings.temperature,
+                           propose_config_change, log_path, config_path)
 
     @r.tool(
         description=("Apply a proposal from propose_config_change: writes the file and "

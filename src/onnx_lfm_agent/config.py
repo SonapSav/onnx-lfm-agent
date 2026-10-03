@@ -19,8 +19,9 @@ class Settings(BaseSettings):
     toolsets: str = "workspace"             # "workspace" (files + config), "demo" (time, add)
     workspace: str = "workspace"            # LFM_WORKSPACE — the only dir file tools may touch
 
-    # LFM_SYSTEM_PROMPT: unset -> built-in (prompts.py); text -> replaces it; "" -> no system prompt.
-    system_prompt: str | None = None
+    # LFM_SYSTEM_PROMPT: unset/"" -> none (default; better in live evals since
+    # propose_fix_from_logs, see CLAUDE.md); "builtin" -> prompts.py; text -> that.
+    system_prompt: str = ""
 
     # Per-tool policy overrides: "name=allow|ask|deny,..." (LFM_TOOL_POLICY).
     # Defaults: read-only tools allow, dangerous tools ask.

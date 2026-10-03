@@ -13,15 +13,16 @@ from .workspace import Workspace
 TOOLSETS = ("workspace", "demo")
 
 
-def build_registry(spec: str | None = None, workspace: str | None = None) -> Registry:
-    """`spec` like "workspace,demo" (default LFM_TOOLSETS)."""
+def build_registry(spec: str | None = None, workspace: str | None = None, client=None) -> Registry:
+    """`spec` like "workspace,demo" (default LFM_TOOLSETS). `client` is for tools
+    that make their own model calls (propose_fix_from_logs); default LFM_URL."""
     names = [n.strip() for n in (settings.toolsets if spec is None else spec).split(",") if n.strip()]
     unknown = sorted(set(names) - set(TOOLSETS))
     if unknown:
         raise ValueError(f"unknown toolset(s) {unknown}; choose from {list(TOOLSETS)}")
     r = Registry()
     if "workspace" in names:
-        workspace_tools.register(r, Workspace(workspace or settings.workspace))
+        workspace_tools.register(r, Workspace(workspace or settings.workspace), client=client)
     if "demo" in names:
         example_tools.register(r)
     return r

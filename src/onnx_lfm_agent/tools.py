@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from jsonschema import Draft202012Validator
+
+# Id of the Agent.run() in progress, so tools can tell "earlier in this
+# conversation's turn" from other requests (the HTTP service shares tools).
+CURRENT_RUN: ContextVar[str | None] = ContextVar("lfm_agent_run", default=None)
 
 MAX_ARG_ERRORS = 5  # keep error feedback short; the 1.2B model drowns in long lists
 

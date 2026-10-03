@@ -46,8 +46,8 @@ def seeded_workspace() -> Iterator[Path]:
 
 def _proposal_diffs(res: RunResult) -> list[str]:
     return [s.result["diff"] for s in res.steps
-            if s.tool == "propose_config_change" and isinstance(s.result, dict)
-            and s.result.get("proposal_id")]
+            if s.tool in ("propose_config_change", "propose_fix_from_logs")
+            and isinstance(s.result, dict) and s.result.get("proposal_id")]
 
 
 def _head_subject(root: Path) -> str:
@@ -64,7 +64,19 @@ def _ok_directed_propose(res: RunResult, root: Path) -> bool:
             and _head_subject(root) == "seed")
 
 
+def _only_timeout_changed(root: Path) -> bool:
+    """app.yaml differs from the seed in request_timeout_s at most: an open-ended
+    run that also applied something else (seen: server.port=10) fails."""
+    from .log_fix import leaves
+    now = leaves(ce.parse((root / "app.yaml").read_text(), "yaml"))
+    seed = leaves(ce.parse((SEED_DIR / "app.yaml").read_text(), "yaml"))
+    return {k: v for k, v in now.items() if k != "server.request_timeout_s"} == \
+        {k: v for k, v in seed.items() if k != "server.request_timeout_s"}
+
+
 def _ok_open_ended(res: RunResult, root: Path) -> bool:
+    if not _only_timeout_changed(root):
+        return False
     for d in _proposal_diffs(res):
         for line in d.splitlines():
             if line.startswith("+  request_timeout_s:"):
@@ -140,7 +152,7 @@ def run_scenario(scenario: Scenario, system_prompt: str | None = None) -> Outcom
     what the model would do if you said yes."""
     with seeded_workspace() as root:
         client = TimedClient()
-        agent = Agent(build_registry("workspace", workspace=str(root)), client=client,
+        agent = Agent(build_registry("workspace", workspace=str(root), client=client), client=client,
                       approve=lambda tool, args: True, tool_policy="",
                       system_prompt=system_prompt)
         res = agent.run(scenario.prompt)

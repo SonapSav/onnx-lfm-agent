@@ -386,11 +386,12 @@ def test_default_policies(root):
     agent = Agent(build_registry("workspace", workspace=str(root)), client=object(), tool_policy="")
     assert agent.policies == {
         "list_files": "allow", "read_file": "allow", "search_files": "allow",
-        "propose_config_change": "allow", "apply_config_change": "ask"}
+        "propose_config_change": "allow", "propose_fix_from_logs": "allow",
+        "apply_config_change": "ask"}
 
 
 def test_toolsets(root):
-    assert len(build_registry("workspace,demo", workspace=str(root))) == 7
+    assert len(build_registry("workspace,demo", workspace=str(root))) == 8
     assert [t.name for t in build_registry("demo")] == ["get_current_time", "add"]
     with pytest.raises(ValueError, match="unknown toolset"):
         build_registry("workspace,shell")

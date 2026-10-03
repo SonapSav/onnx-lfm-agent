@@ -66,6 +66,7 @@ symlinks leading out are refused, and `.git` is hidden.
 | `read_file` | allow | numbered lines, line ranges, size-capped |
 | `search_files` | allow | case-insensitive text search, `file:line: text` |
 | `propose_config_change` | allow | edit **one** dotted key in a JSON/YAML file *in memory*; returns diff, schema validation (`<name>.schema.json` if present) and a `proposal_id`. Writes nothing. |
+| `propose_fix_from_logs` | allow | harness-driven: code pulls the error lines from a log and lists the config's real keys (values, schema limits, comments); the model only picks the key, then the value (each a constrained tool call, retried on error); then `propose_config_change`. Writes nothing. Paths default to the only `.log` / config file. |
 | `apply_config_change` | **ask** | write a valid proposal and `git commit` that file only (author `onnx-lfm-agent`, trailer `Agent-Proposal: pN`). Refuses if the file changed since the proposal. |
 
 The CLI approval prompt shows the diff being applied. Undo is **operator-only**:
@@ -83,12 +84,13 @@ lfm-agent "The logs show upstream timeouts at 5s. Propose changing server.reques
 Create it before `docker compose up` (otherwise Docker creates it root-owned).
 
 ## System prompt
-A short built-in system prompt (two lines, `prompts.py`) is sent on every model
-call; it is not stored in conversation history. Override with
-`LFM_SYSTEM_PROMPT="..."`, or disable with `LFM_SYSTEM_PROMPT=`. Measured
-trade-off with the 1.2B model: with it, the agent answers general questions
-(without, it refuses them), but it may try to apply a change you only asked it
-to propose — you'll see the diff at the approval prompt and can decline.
+Off by default. `LFM_SYSTEM_PROMPT=builtin` sends a short built-in prompt (two
+lines, `prompts.py`); any other text is sent as-is. It goes first on every model
+call and is never stored in conversation history. Measured with the 1.2B model
+and the current six tools (12 runs per scenario): without a prompt it passed
+46/48 live-eval runs, with the built-in one 42/48. With the prompt it more often
+applies a change you only asked it to propose, and sometimes refuses general
+questions ("I can only list files").
 
 ## Tool policy
 Each tool is `allow` (runs), `ask` (runs only if approved) or `deny` (never
@@ -104,6 +106,7 @@ Override per tool with `LFM_TOOL_POLICY="name=allow,other=deny"`.
 - `toolsets.py` — builds the registry from `LFM_TOOLSETS`.
 - `workspace.py` — the sandbox (path resolution) + git helper.
 - `workspace_tools.py` — file tools, propose/apply, operator rollback.
+- `log_fix.py` — the `propose_fix_from_logs` workflow (evidence, key list, two narrow model decisions).
 - `evals.py` — live eval scenarios (A–D) shared by `scripts/eval_live.py` and the integration tests.
 - `config_edit.py` — one-key JSON/YAML edits (comment/indent-preserving), schema validation, diff.
 - `example_tools.py` — demo tools (time, add), toolset `demo`.

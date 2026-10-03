@@ -9,9 +9,9 @@ Scenarios (src/onnx_lfm_agent/evals.py):
 Uses LFM_URL / LFM_API_KEY / LFM_TEMPERATURE from the environment or ./.env.
 Each run uses a fresh temp git workspace; applies are auto-approved.
 
-  .venv/bin/python scripts/eval_live.py                 # all scenarios, 6 runs, prompt on
+  .venv/bin/python scripts/eval_live.py                 # all scenarios, 6 runs, LFM_SYSTEM_PROMPT (default off)
   .venv/bin/python scripts/eval_live.py -n 3 -s A,B     # quicker
-  .venv/bin/python scripts/eval_live.py --compare-prompt  # system prompt off vs on
+  .venv/bin/python scripts/eval_live.py --compare-prompt  # system prompt off vs built-in
   LFM_URL=http://gpu-pc:8383/v1 .venv/bin/python scripts/eval_live.py
 """
 
@@ -27,8 +27,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from onnx_lfm_agent.config import settings  # noqa: E402
 from onnx_lfm_agent.evals import SCENARIOS, run_scenario  # noqa: E402
+from onnx_lfm_agent.prompts import BUILTIN  # noqa: E402
 
-SHORT = {"propose_config_change": "propose", "apply_config_change": "apply",
+
+def _mode(prompt: str) -> str:
+    return "off" if not prompt else "on" if prompt == BUILTIN else "custom"
+
+SHORT = {"propose_config_change": "propose", "apply_config_change": "apply", "propose_fix_from_logs": "fix",
          "search_files": "search", "read_file": "read", "list_files": "list"}
 
 
@@ -44,7 +49,7 @@ def main() -> None:
     keys = [k.strip().upper() for k in args.scenarios.split(",") if k.strip()]
     if unknown := [k for k in keys if k not in SCENARIOS]:
         sys.exit(f"unknown scenario(s) {unknown}; choose from {list(SCENARIOS)}")
-    modes = [("off", ""), ("on", None)] if args.compare_prompt else [("on", None)]
+    modes = [("off", ""), ("on", BUILTIN)] if args.compare_prompt else [(_mode(settings.system_prompt), None)]
 
     print(f"model API: {settings.url}  temperature: {settings.temperature}  runs: {args.runs}", flush=True)
     rows = []

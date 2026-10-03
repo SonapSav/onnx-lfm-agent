@@ -48,7 +48,8 @@ lifecycle, deps, and trust boundary (this one *executes tools*; the API only
 - `prompts.py` — system prompt = 2-line `BASE` + `Registry.guidance` lines from toolsets (workspace contributes
   **none**, on purpose — see gotchas). `Agent` sends it as the leading system message on **every** call but never
   stores it in returned history (a leading system message in incoming history is dropped). `LFM_SYSTEM_PROMPT`:
-  unset → built-in, text → replaces, `""` → off. Costs +34 prompt tokens (~0.2 s/call). Default **on** (decided).
+  unset/`""` → off (**default since propose_fix_from_logs**, user decision 2026-10-03), `builtin` → `prompts.py`,
+  other text → used as-is. The built-in one costs +34 prompt tokens.
 - `toolsets.py` — `build_registry(LFM_TOOLSETS)`: `workspace` (default) and/or `demo` (`example_tools.py`: time, add).
 - `workspace.py` — `Workspace.resolve()` sandbox (relative to `LFM_WORKSPACE`; `..`/absolute/symlink escapes and `.git`
   refused) + `git()` helper (author `onnx-lfm-agent`) + a lock for git-mutating ops.
@@ -57,6 +58,16 @@ lifecycle, deps, and trust boundary (this one *executes tools*; the API only
   `apply_config_change` (dangerous/ask; sha256 staleness check, commits only that file with `Agent-Proposal: pN`
   trailer, restores the file if the commit fails; `preview` shows the diff to the approver).
   **Rollback is operator-only**: `rollback_last_change()` / `lfm-agent --rollback [-y]`, reverts HEAD only if it has the trailer.
+  `propose_fix_from_logs` (allow, `log_fix.py`): **harness-driven workflow** for open-ended "check the logs and fix it" —
+  code extracts error lines (dedup, counts) and lists the config's leaf keys (value, schema limits, YAML comment); the
+  model makes two narrow single-tool decisions, `choose_setting(key: enum of real keys)` then `set_value(value: the
+  key's own schema)`, retried with errors fed back (unchanged value refused); then `propose_config_change`. Result has
+  `summary` + `next` ("report; apply only if asked") — without it the outer model re-proposed garbage and applied that.
+  Its own model calls use the registry's `client` (`build_registry(client=...)`, default LFM_URL). **Run-scoped
+  guard:** `Agent.run()` sets `tools.CURRENT_RUN`; proposals record it; the tool refuses (tool error naming the
+  pending `pN`) if this run already has an unapplied proposal for the same file. Without it, directed A ("set X to
+  15, then apply") sometimes also called the tool, got 10 as `p2` and applied that (A 10/12). A "use only when the
+  user did not name the setting" description didn't help (still fix calls); the tool error did (A 12/12).
 - `config_edit.py` — one dotted key per edit (ruamel round-trip keeps YAML comments/indent; JSON keeps indent),
   schema = sibling `<stem>.schema.json`, unified diff; errors list existing keys so the model can retry.
 - `examples/workspace/` — demo `app.yaml` + schema + `logs/app.log` (timeouts); copy to `./workspace` (gitignored, own git repo).
@@ -74,7 +85,7 @@ lifecycle, deps, and trust boundary (this one *executes tools*; the API only
   `test_integration.py` (`-m integration`, deselected by default via `addopts`; skips if the API is down): asserts
   only what Instruct does reliably (A, D) plus the invariant that `app.yaml` stays schema-valid after B/C runs.
 
-Verified: 97 unit + 4 integration tests pass; live: CLI (venv + compose container) and the HTTP service against the running API,
+Verified: 109 unit + 5 integration tests pass (live evals 48/48 with the default, prompt off); live: CLI (venv + compose container) and the HTTP service against the running API,
 including propose → approve → commit → operator rollback on the demo workspace.
 
 ## Roadmap — what to build next (rough priority)
@@ -85,15 +96,16 @@ including propose → approve → commit → operator rollback on the demo works
    (diff, schema check, git commit, operator rollback). Maybe later: `POST /proposals/{id}/apply` so a human can approve
    server-side proposals over HTTP; risk/confidence-based approval.
 3. **Real tools** — first batch DONE (workspace files + config propose/apply). Next candidates: HTTP GET (host allowlist),
-   DB read-only query. Keep the set small (now 5 tools) — this is a 1.2B model.
-   **Known limit:** open-ended "read the logs and fix the config" fails 0/6 under *every* variant tried (no prompt,
-   prompt with workspace rules, base prompt, read-before-propose guard): Instruct guesses key names and never uses
-   the file it reads. Directed requests ("change server.request_timeout_s to 15, then apply") succeed 6/6.
-   **Next step for it: a harness-driven workflow** (code sequences search logs → read config → propose; the model
-   only fills one decision per step), not more prompting. See "Live evals" below.
+   DB read-only query. Keep the set small (now 6 tools) — this is a 1.2B model.
+   Open-ended "read the logs and fix the config" was 0/6 under every prompting variant (Instruct guesses key names
+   and never uses what it reads). **Solved by the harness-driven `propose_fix_from_logs`** (see above): C 12/12 with
+   the system prompt off and on. Probing showed key and value must be separate decisions: asked together it picked
+   the right key 8/8 but copied the current value back 8/8; asked alone it raised the value 6/6. Saying "must differ
+   from 5" made it worse (chose 3) — code enforces that instead. Pattern for future open-ended tasks: code plans,
+   model fills enum-constrained single decisions.
 4. **Streaming** of assistant text + tool-call deltas (API already streams; surface it).
 5. **Tracing/logging** of each step (prompt, tool calls, results) for debugging and evals.
-6. **System prompt** — DONE (base prompt, default on). Still open: state/memory beyond the raw message list
+6. **System prompt** — DONE (built-in base prompt, now default **off**; `LFM_SYSTEM_PROMPT=builtin`). Still open: state/memory beyond the raw message list
    (e.g. trimming long histories). The API's prompt-prefix cache now skips re-reading the shared start of each
    round, but a longer history still means bigger snapshots and more new tokens per round.
 7. ~~**Tests**~~ — DONE: `pytest -m integration` (live, ~2 min) + `scripts/eval_live.py` / `scripts/bench_api.py`.
@@ -150,7 +162,7 @@ including propose → approve → commit → operator rollback on the demo works
   | variant | A | B | C | D |
   |---|---|---|---|---|
   | no system prompt | 6 | **6** | 0 | **0** (refuses: "functions are focused on file management") |
-  | base prompt (shipped) | 6 | 0 | 0 | **6** |
+  | base prompt (shipped until propose_fix_from_logs) | 6 | 0 | 0 | **6** |
   | + workspace rules ("read the file first", "only apply if asked") | 6 | 0 | 0* | 5 |
   | + read-before-propose guard (removed) | 6 | 0–1 | 0 | 0 / 6 |
 
@@ -158,6 +170,13 @@ including propose → approve → commit → operator rollback on the demo works
   example. **Any** system prompt makes Instruct apply when only asked to propose (safe: CLI asks, server denies) —
   accepted in exchange for D. The guard derailed the model (extra round → `read_file(".")`, applying proposals that
   don't exist). Lesson: this model follows tool **errors** and narrow tool design, not instructions.
+- **Live evals with `propose_fix_from_logs`** (GTX 1660, 12 runs each): prompt **off** A 11 B 12 C 12 D 11 (46/48);
+  prompt **on** (default) A 12 B 9 C 12 D 9 (42/48). The 6th tool flipped the old trade-off: D no longer needs the
+  prompt (it was 0/6 without), and the prompt now costs B and D. **Default switched to off** (user, 2026-10-03).
+  With the run-scoped guard, prompt off: **A 12 B 12 C 12 D 12 (48/48)**, 0.5–0.7 s/call.
+  Adding "Answer general questions from your own knowledge." to BASE made it worse (B 1/6, D 1/6 with prompt on) —
+  reverted. Live check C also requires nothing but the timeout to have changed (a run that applied port=10 passed
+  the old check).
 - **LFM2.5-1.2B-Thinking evaluated, not adopted (for now).** ONNX build `LiquidAI/LFM2.5-1.2B-Thinking-ONNX`, same
   template/tool format. On this CPU: ~1000–1350 reasoning tokens per round → 68–87 s/call (Instruct ~8 s); at 1024
   max_tokens every call was cut off mid-thought. Quality was better (right key, included `path`, did *not* apply

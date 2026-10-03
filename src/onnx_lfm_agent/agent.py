@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 from dataclasses import asdict, dataclass, field
 from typing import Any, Callable
 
 from .client import make_client
 from .config import settings
-from .prompts import build_system_prompt
-from .tools import Registry, Tool, parse_policy_spec
+from .prompts import BUILTIN, build_system_prompt
+from .tools import CURRENT_RUN, Registry, Tool, parse_policy_spec
 
 log = logging.getLogger(__name__)
 
@@ -58,10 +59,10 @@ class Agent:
         self.approve = approve
         self.policies = self._resolve_policies(
             settings.tool_policy if tool_policy is None else tool_policy)
-        # None -> LFM_SYSTEM_PROMPT -> built-in; "" disables it.
+        # None -> LFM_SYSTEM_PROMPT; "" = none; "builtin" = prompts.py; else the text.
         if system_prompt is None:
             system_prompt = settings.system_prompt
-        if system_prompt is None:
+        if system_prompt == BUILTIN:
             system_prompt = build_system_prompt(registry)
         self.system_prompt = system_prompt
 
@@ -81,6 +82,13 @@ class Agent:
         return policies
 
     def run(self, user_text: str, history: list | None = None) -> RunResult:
+        token = CURRENT_RUN.set(uuid.uuid4().hex)
+        try:
+            return self._run(user_text, history)
+        finally:
+            CURRENT_RUN.reset(token)
+
+    def _run(self, user_text: str, history: list | None) -> RunResult:
         messages = list(history or [])
         # The system prompt is sent on every call but never kept in history:
         # callers can't duplicate it, and prompt changes apply to old

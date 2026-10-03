@@ -2,7 +2,7 @@
 
 Run with:  pytest -m integration        (uses LFM_URL / LFM_API_KEY / ./.env)
 Skipped when the API isn't reachable. Only scenarios that pass reliably with
-LFM2.5-1.2B-Instruct are asserted (6/6 in live evals); the rest are measured
+LFM2.5-1.2B-Instruct are asserted (>= 11/12 in live evals); the rest are measured
 by scripts/eval_live.py instead.
 """
 
@@ -23,7 +23,7 @@ def api_up():
         pytest.skip(f"onnx-lfm-api not reachable at {settings.url}: {e}")
 
 
-@pytest.mark.parametrize("key", ["A", "D"])
+@pytest.mark.parametrize("key", ["A", "C", "D"])
 def test_reliable_scenarios(key):
     outcome = run_scenario(SCENARIOS[key])
     assert outcome.passed, (f"{key} failed: tools={outcome.tools} "
@@ -32,6 +32,6 @@ def test_reliable_scenarios(key):
 
 @pytest.mark.parametrize("key", ["B", "C"])
 def test_config_stays_valid_even_when_the_model_fails(key):
-    """B and C often fail as tasks with this model; the config must survive regardless."""
+    """B still fails sometimes with this model; the config must survive regardless."""
     outcome = run_scenario(SCENARIOS[key])
     assert outcome.config_ok, f"app.yaml invalid after {key}: tools={outcome.tools}"

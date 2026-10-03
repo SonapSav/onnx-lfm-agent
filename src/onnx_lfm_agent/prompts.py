@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from .tools import Registry
 
+BUILTIN = "builtin"  # LFM_SYSTEM_PROMPT value selecting this prompt (default: none)
+
 BASE = [
     "You are a concise assistant with tools. Use a tool only when the request needs one.",
     "If a tool returns an error, fix the arguments and try again.",
